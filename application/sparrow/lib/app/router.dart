@@ -6,6 +6,7 @@ import '../screens/new_incident/new_incident_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/search/search_screen.dart';
 import '../screens/splash/splash_screen.dart';
+import '../screens/timeline/timeline_screen.dart';
 import 'app_shell.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -15,6 +16,21 @@ final GoRouter appRouter = GoRouter(
       path: '/',
       builder: (context, state) => const SplashScreen(),
     ),
+
+    GoRoute(
+      path: '/timeline/:id',
+      builder: (context, state) => TimelineScreen(
+        incidentId: state.pathParameters['id'] ?? 'inc_002',
+      ),
+    ),
+    GoRoute(
+      path: '/incidents/:id',
+      builder: (context, state) => TimelineScreen(
+        incidentId: state.pathParameters['id'] ?? 'inc_002',
+      ),
+    ),
+
+
 
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {

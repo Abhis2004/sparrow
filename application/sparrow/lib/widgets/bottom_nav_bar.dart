@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/localization/app_localizations.dart';
+
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({
     super.key,
@@ -12,6 +14,7 @@ class BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final loc = AppLocalizations.of(context);
 
     return SafeArea(
       top: false,
@@ -29,7 +32,7 @@ class BottomNavBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: theme.shadowColor.withValues(alpha: 0.08),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),
@@ -42,7 +45,7 @@ class BottomNavBar extends StatelessWidget {
                       context,
                       index: 0,
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: loc.text('home'),
                     ),
                   ),
                   Expanded(
@@ -50,7 +53,7 @@ class BottomNavBar extends StatelessWidget {
                       context,
                       index: 1,
                       icon: Icons.folder_outlined,
-                      label: 'Incidents',
+                      label: loc.text('incidents'),
                     ),
                   ),
 
@@ -61,7 +64,7 @@ class BottomNavBar extends StatelessWidget {
                       context,
                       index: 3,
                       icon: Icons.search_rounded,
-                      label: 'Search',
+                      label: loc.text('search'),
                     ),
                   ),
                   Expanded(
@@ -69,7 +72,7 @@ class BottomNavBar extends StatelessWidget {
                       context,
                       index: 4,
                       icon: Icons.person_outline_rounded,
-                      label: 'Profile',
+                      label: loc.text('profile'),
                     ),
                   ),
                 ],
@@ -89,15 +92,15 @@ class BottomNavBar extends StatelessWidget {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: theme.colorScheme.primary.withOpacity(.30),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.30),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.add,
-                    color: Colors.white,
+                    color: theme.colorScheme.onPrimary,
                     size: 30,
                   ),
                 ),
@@ -137,6 +140,8 @@ class BottomNavBar extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: selected
                     ? theme.colorScheme.primary
