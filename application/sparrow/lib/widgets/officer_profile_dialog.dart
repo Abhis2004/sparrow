@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/colors.dart';
+import '../core/localization/app_localizations.dart';
 import '../screens/home/home_service.dart';
 import '../screens/home/model/home_model.dart';
 
@@ -36,6 +37,8 @@ class _OfficerProfileSetupDialogState
   late TextEditingController _stationController;
   late TextEditingController _districtController;
   late TextEditingController _stateController;
+  late TextEditingController _badgeNumberController;
+  late TextEditingController _phoneController;
 
   @override
   void initState() {
@@ -48,6 +51,8 @@ class _OfficerProfileSetupDialogState
     _stationController = TextEditingController(text: currentProfile.station);
     _districtController = TextEditingController(text: currentProfile.district);
     _stateController = TextEditingController(text: currentProfile.state);
+    _badgeNumberController = TextEditingController(text: currentProfile.badgeNumber);
+    _phoneController = TextEditingController(text: currentProfile.phone);
 
     _nameController.addListener(() {
       setState(() {});
@@ -61,6 +66,8 @@ class _OfficerProfileSetupDialogState
     _stationController.dispose();
     _districtController.dispose();
     _stateController.dispose();
+    _badgeNumberController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -77,6 +84,8 @@ class _OfficerProfileSetupDialogState
         station: _stationController.text.trim(),
         district: _districtController.text.trim(),
         state: _stateController.text.trim(),
+        badgeNumber: _badgeNumberController.text.trim(),
+        phone: _phoneController.text.trim(),
         profileImage: null,
       );
 
@@ -93,6 +102,7 @@ class _OfficerProfileSetupDialogState
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final loc = AppLocalizations.of(context);
 
     final dialogContent = Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -119,7 +129,7 @@ class _OfficerProfileSetupDialogState
                       Icon(Icons.shield_rounded, size: 16, color: colorScheme.primary),
                       const SizedBox(width: 6),
                       Text(
-                        'OFFICER IDENTIFICATION',
+                        loc.text('officer_identification'),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -133,7 +143,9 @@ class _OfficerProfileSetupDialogState
                 const SizedBox(height: 16),
 
                 Text(
-                  widget.isMandatory ? 'Setup Officer Profile' : 'Edit Officer Profile',
+                  widget.isMandatory
+                      ? loc.text('setup_officer_profile')
+                      : loc.text('edit_officer_profile'),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -141,8 +153,8 @@ class _OfficerProfileSetupDialogState
                 const SizedBox(height: 6),
                 Text(
                   widget.isMandatory
-                      ? 'Please complete all required fields to proceed into the application.'
-                      : 'Update your official profile details.',
+                      ? loc.text('mandatory_profile_desc')
+                      : loc.text('edit_profile_desc'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurface.withValues(alpha: 0.7),
@@ -167,38 +179,62 @@ class _OfficerProfileSetupDialogState
 
                 // Form Fields
                 _buildTextField(
+                  context: context,
                   controller: _nameController,
-                  label: 'Full Name *',
-                  hint: 'e.g. Rahul Sharma',
+                  label: loc.text('full_name_required'),
+                  hint: loc.text('hint_full_name'),
                   icon: Icons.person_outline_rounded,
                 ),
                 const SizedBox(height: 14),
                 _buildTextField(
+                  context: context,
                   controller: _designationController,
-                  label: 'Designation *',
-                  hint: 'e.g. Sub Inspector',
+                  label: loc.text('designation_required'),
+                  hint: loc.text('hint_designation'),
                   icon: Icons.badge_outlined,
                 ),
                 const SizedBox(height: 14),
                 _buildTextField(
+                  context: context,
                   controller: _stationController,
-                  label: 'Police Station *',
-                  hint: 'e.g. Sector 18, Noida',
+                  label: loc.text('police_station_required'),
+                  hint: loc.text('hint_police_station'),
                   icon: Icons.local_police_outlined,
                 ),
                 const SizedBox(height: 14),
                 _buildTextField(
+                  context: context,
                   controller: _districtController,
-                  label: 'District *',
-                  hint: 'e.g. Gautam Budh Nagar',
+                  label: loc.text('district_required'),
+                  hint: loc.text('hint_district'),
                   icon: Icons.location_city_outlined,
                 ),
                 const SizedBox(height: 14),
                 _buildTextField(
+                  context: context,
                   controller: _stateController,
-                  label: 'State *',
-                  hint: 'e.g. Uttar Pradesh',
+                  label: loc.text('state_required'),
+                  hint: loc.text('hint_state'),
                   icon: Icons.map_outlined,
+                ),
+                const SizedBox(height: 14),
+                _buildTextField(
+                  context: context,
+                  controller: _badgeNumberController,
+                  label: loc.text('badge_number_required'),
+                  hint: loc.text('hint_badge_number'),
+                  icon: Icons.numbers_outlined,
+                  isRequired: true,
+                ),
+                const SizedBox(height: 14),
+                _buildTextField(
+                  context: context,
+                  controller: _phoneController,
+                  label: loc.text('contact_phone_required'),
+                  hint: loc.text('hint_phone'),
+                  icon: Icons.phone_outlined,
+                  isRequired: true,
+                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 24),
 
@@ -216,9 +252,9 @@ class _OfficerProfileSetupDialogState
                       ),
                       elevation: 2,
                     ),
-                    child: const Text(
-                      'Save & Continue',
-                      style: TextStyle(
+                    child: Text(
+                      loc.text('save_and_continue'),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -243,14 +279,19 @@ class _OfficerProfileSetupDialogState
   }
 
   Widget _buildTextField({
+    required BuildContext context,
     required TextEditingController controller,
     required String label,
     required String hint,
     required IconData icon,
+    bool isRequired = true,
+    TextInputType keyboardType = TextInputType.text,
   }) {
+    final loc = AppLocalizations.of(context);
     return TextFormField(
       controller: controller,
       textCapitalization: TextCapitalization.words,
+      keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -260,12 +301,14 @@ class _OfficerProfileSetupDialogState
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'This field is required';
-        }
-        return null;
-      },
+      validator: isRequired
+          ? (value) {
+              if (value == null || value.trim().isEmpty) {
+                return loc.text('field_required_error');
+              }
+              return null;
+            }
+          : null,
     );
   }
 }

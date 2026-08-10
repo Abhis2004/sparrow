@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/colors.dart';
 import '../../core/localization/app_localizations.dart';
+import '../../utils/time_formatter.dart';
 import 'model/home_model.dart';
 
 /// Top header widget displaying officer info, language toggle, and theme toggle icons
@@ -254,7 +255,7 @@ class CurrentIncidentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      startedAt,
+                      formatTo12HourTime(startedAt),
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -525,11 +526,12 @@ class QuickActionCard extends StatelessWidget {
                 localizedTitle,
                 style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w600,
+                  fontSize: 11,
                   color: isDark ? colorScheme.onSurface : colorStyle.textColor,
-                  height: 1.2,
+                  height: 1.15,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
             ],

@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/colors.dart';
-import '../../core/localization/app_language.dart';
 import '../../core/localization/app_localizations.dart';
-import '../../core/localization/locale_provider.dart';
 import '../../widgets/officer_profile_dialog.dart';
 import '../home/home_service.dart';
-import '../incidents/incidents_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -18,12 +15,8 @@ class ProfileScreen extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final loc = AppLocalizations.of(context);
-    final currentLanguage = ref.watch(languageProvider);
 
     final homeDataAsync = ref.watch(homeDataProvider);
-    final allIncidentsNotifier = ref.read(allIncidentsProvider.notifier);
-    final isSimulatedEmpty = allIncidentsNotifier.isSimulatedEmpty;
-    final metrics = ref.watch(incidentMetricsProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
@@ -37,240 +30,230 @@ class ProfileScreen extends ConsumerWidget {
           final officer = homeData.officer;
 
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             children: [
-              // Profile Header Card
+              // Red Bold Prototype Disclaimer Banner
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [colorScheme.primary, colorScheme.primaryContainer],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                  color: isDark
+                      ? Colors.red.withValues(alpha: 0.15)
+                      : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? Colors.red.shade400 : Colors.red.shade700,
+                    width: 1.5,
                   ),
-                  borderRadius: BorderRadius.circular(24),
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.white,
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: isDark ? Colors.red.shade400 : Colors.red.shade700,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Text(
-                        officer.initialLetter,
+                        'NOTICE: THIS IS A PROTOTYPE APPLICATION INTENDED EXCLUSIVELY FOR TESTING AND EVALUATION PURPOSES.',
                         style: TextStyle(
-                          fontSize: 36,
+                          color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                           fontWeight: FontWeight.bold,
-                          color: colorScheme.primary,
+                          fontSize: 12,
+                          letterSpacing: 0.4,
+                          height: 1.3,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      officer.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${officer.designation} • Badge #8492',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${officer.station}, ${officer.district}, ${officer.state}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        OfficerProfileSetupDialog.show(context, isMandatory: false);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white70),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      icon: const Icon(Icons.edit_note_rounded, size: 18),
-                      label: const Text('Edit Officer Details'),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Language Selector Tile
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+              // Beautiful Officer Profile Hero Card
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [colorScheme.primary, colorScheme.primaryContainer],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                margin: EdgeInsets.zero,
-                elevation: 1,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  leading: CircleAvatar(
-                    backgroundColor: colorScheme.primary.withValues(alpha: 0.1),
-                    child: Icon(Icons.g_translate_rounded, color: colorScheme.primary),
-                  ),
-                  title: const Text(
-                    'App Language / भाषा',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    currentLanguage == AppLanguage.english ? 'English' : 'हिंदी (Hindi)',
-                    style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600),
-                  ),
-                  trailing: SegmentedButton<AppLanguage>(
-                    segments: const [
-                      ButtonSegment(value: AppLanguage.english, label: Text('EN')),
-                      ButtonSegment(value: AppLanguage.hindi, label: Text('हिंदी')),
-                    ],
-                    selected: {currentLanguage},
-                    onSelectionChanged: (selected) {
-                      ref.read(languageProvider.notifier).setLanguage(selected.first);
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Cases Summary Card
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                margin: EdgeInsets.zero,
-                elevation: 1,
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loc.text('recent_incidents'),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                child: Column(
+                  children: [
+                    // Avatar Badge
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircleAvatar(
+                        radius: 42,
+                        backgroundColor: colorScheme.primary,
+                        child: Text(
+                          officer.initialLetter,
+                          style: const TextStyle(
+                            fontSize: 38,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Officer Name
+                    Text(
+                      officer.name.isNotEmpty ? officer.name : 'Officer Profile',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Designation Badge
+                    if (officer.designation.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          officer.designation,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+
+                    // Location Pill
+                    if (officer.station.isNotEmpty ||
+                        officer.district.isNotEmpty ||
+                        officer.state.isNotEmpty)
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          _StatTile(
-                            label: loc.text('all_cases'),
-                            count: metrics['total'] ?? 0,
-                            color: colorScheme.primary,
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 15,
+                            color: Colors.white70,
                           ),
-                          _StatTile(
-                            label: loc.text('active'),
-                            count: metrics['active'] ?? 0,
-                            color: AppColors.success,
-                          ),
-                          _StatTile(
-                            label: loc.text('completed'),
-                            count: metrics['completed'] ?? 0,
-                            color: colorScheme.primary,
-                          ),
-                          _StatTile(
-                            label: loc.text('draft'),
-                            count: metrics['draft'] ?? 0,
-                            color: AppColors.warning,
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              [
+                                if (officer.station.isNotEmpty) officer.station,
+                                if (officer.district.isNotEmpty) officer.district,
+                                if (officer.state.isNotEmpty) officer.state,
+                              ].join(', '),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 13,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    const SizedBox(height: 20),
+
+                    // Edit Profile Action Button
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        OfficerProfileSetupDialog.show(context, isMandatory: false);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: colorScheme.primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.edit_note_rounded, size: 20),
+                      label: const Text(
+                        'Edit Profile Details',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Edge Case Testing Section
+              // Official Credentials & Information Card
               Container(
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: colorScheme.primary.withValues(alpha: 0.3),
-                    width: 1.5,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06),
                   ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.science_outlined, color: colorScheme.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'First-Time Signup Simulation',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Text(
-                      'Toggle ON to simulate a newly registered officer who has 0 cases. Test how Home, Incidents Log, and Timeline empty states behave.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
+                      'OFFICIAL INFORMATION',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                        letterSpacing: 1.1,
                       ),
                     ),
-                    const Divider(height: 24),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Simulate New Officer (0 Cases)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      subtitle: Text(
-                        isSimulatedEmpty
-                            ? 'Currently showing ZERO cases state'
-                            : 'Currently showing demo dataset',
-                        style: TextStyle(
-                          color: isSimulatedEmpty ? AppColors.warning : AppColors.success,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      value: isSimulatedEmpty,
-                      onChanged: (value) {
-                        allIncidentsNotifier.toggleSimulatedEmptyState(value);
-                      },
+                    const SizedBox(height: 16),
+                    _InfoRow(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Full Name',
+                      value: officer.name.isNotEmpty ? officer.name : 'Not set',
                     ),
                     const Divider(height: 24),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Clear Local Officer Profile',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      subtitle: const Text(
-                        'Removes saved profile from SharedPreferences to re-trigger mandatory setup popup.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      trailing: OutlinedButton(
-                        onPressed: () {
-                          ref.read(officerProfileProvider.notifier).clearProfile();
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: const BorderSide(color: AppColors.error),
-                        ),
-                        child: const Text('Reset'),
-                      ),
+                    _InfoRow(
+                      icon: Icons.badge_outlined,
+                      label: 'Designation',
+                      value: officer.designation.isNotEmpty ? officer.designation : 'Not set',
+                    ),
+                    const Divider(height: 24),
+                    _InfoRow(
+                      icon: Icons.local_police_outlined,
+                      label: 'Police Station',
+                      value: officer.station.isNotEmpty ? officer.station : 'Not set',
+                    ),
+                    const Divider(height: 24),
+                    _InfoRow(
+                      icon: Icons.location_city_outlined,
+                      label: 'District',
+                      value: officer.district.isNotEmpty ? officer.district : 'Not set',
+                    ),
+                    const Divider(height: 24),
+                    _InfoRow(
+                      icon: Icons.map_outlined,
+                      label: 'State',
+                      value: officer.state.isNotEmpty ? officer.state : 'Not set',
                     ),
                   ],
                 ),
@@ -285,41 +268,54 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _StatTile extends StatelessWidget {
-  const _StatTile({
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
     required this.label,
-    required this.count,
-    required this.color,
+    required this.value,
   });
 
+  final IconData icon;
   final String label;
-  final int count;
-  final Color color;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            '$count',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+          child: Icon(icon, size: 18, color: colorScheme.primary),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

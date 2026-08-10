@@ -4,7 +4,7 @@ import '../screens/home/home_screen.dart';
 import '../screens/incidents/incidents_screen.dart';
 import '../screens/new_incident/new_incident_screen.dart';
 import '../screens/profile/profile_screen.dart';
-import '../screens/search/search_screen.dart';
+import '../screens/report_generation/report_generation_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/timeline/timeline_screen.dart';
 import 'app_shell.dart';
@@ -69,8 +69,8 @@ final GoRouter appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/search',
-              builder: (context, state) => const SearchScreen(),
+              path: '/report-generation',
+              builder: (context, state) => const ReportGenerationScreen(),
             ),
           ],
         ),

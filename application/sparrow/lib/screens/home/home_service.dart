@@ -14,15 +14,6 @@ final officerProfileProvider =
 class OfficerProfileNotifier extends Notifier<OfficerProfile> {
   static const String _prefKey = 'sparrow_officer_profile';
 
-  static const OfficerProfile defaultProfile = OfficerProfile(
-    name: 'Rahul Sharma',
-    designation: 'Sub Inspector',
-    station: 'Sector 18, Noida',
-    district: 'Gautam Budh Nagar',
-    state: 'Uttar Pradesh',
-    profileImage: null,
-  );
-
   static const OfficerProfile emptyProfile = OfficerProfile(
     name: '',
     designation: '',
@@ -108,9 +99,9 @@ class HomeService {
       orElse: () => Incident(
         id: incidentId,
         incidentName: 'Incident $incidentId',
-        location: 'Sector 62, Noida',
-        startedAt: '04:30 PM',
-        startedDate: '17 May 2026',
+        location: '',
+        startedAt: '',
+        startedDate: '',
         status: IncidentStatus.active,
         category: IncidentCategory.general,
         rawStatus: 'active',
@@ -124,7 +115,7 @@ class HomeService {
       id: matchingIncident.id,
       incidentName: matchingIncident.incidentName,
       location: matchingIncident.location,
-      gps: const GpsLocation(latitude: 28.6272, longitude: 77.3635),
+      gps: const GpsLocation(latitude: 0, longitude: 0),
       startedAt: matchingIncident.startedAt,
       startedDate: matchingIncident.startedDate,
       completedAt: matchingIncident.completedAt ?? '',
@@ -133,7 +124,7 @@ class HomeService {
       category: matchingIncident.category,
       rawStatus: matchingIncident.rawStatus,
       rawCategory: matchingIncident.rawCategory,
-      weather: 'Clear, 34°C, slight humidity',
+      weather: '',
       station: officer.station,
       district: officer.district,
       state: officer.state,
@@ -147,12 +138,11 @@ class HomeService {
     final newDetails = TimelineDetails(
       incident: overview,
       officer: AssignedOfficer(
-        id: 'off_104',
+        badgeNumber: officer.badgeNumber,
         name: officer.name,
         designation: officer.designation,
         station: officer.station,
-        badgeNumber: 'UP-GBN-8821',
-        phone: '+91-9454403812',
+        phone: officer.phone,
       ),
       victims: const [],
       witnesses: const [],
@@ -161,19 +151,18 @@ class HomeService {
       evidence: const [],
       timeline: [
         TimelineEvent(
-          timelineId: 'tl_001',
+          timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
           timestamp: DateTime.now().toIso8601String(),
           eventType: 'case_brief',
-          personId: 'off_104',
+          personId: officer.badgeNumber,
           referenceId: '',
           evidenceIds: const [],
-          gps: const GpsLocation(latitude: 28.6272, longitude: 77.3635),
+          gps: const GpsLocation(latitude: 0, longitude: 0),
         ),
       ],
     );
 
-    // Persist generated fallback to Isar DB
-    await _isarService.saveTimelineDetails(incidentId, newDetails);
+    // Return generated in-memory fallback without persisting auto-generated data
     return newDetails;
   }
 
@@ -189,6 +178,3 @@ class HomeService {
     );
   }
 }
-
-
-

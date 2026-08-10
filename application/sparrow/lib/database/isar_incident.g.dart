@@ -38,39 +38,44 @@ const IsarIncidentSchema = CollectionSchema(
       name: r'incidentName',
       type: IsarType.string,
     ),
-    r'location': PropertySchema(
+    r'lastInteracted': PropertySchema(
       id: 5,
+      name: r'lastInteracted',
+      type: IsarType.string,
+    ),
+    r'location': PropertySchema(
+      id: 6,
       name: r'location',
       type: IsarType.string,
     ),
     r'observationCount': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'observationCount',
       type: IsarType.long,
     ),
     r'startedAt': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'startedAt',
       type: IsarType.string,
     ),
     r'startedDate': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'startedDate',
       type: IsarType.string,
     ),
-    r'status': PropertySchema(id: 9, name: r'status', type: IsarType.string),
+    r'status': PropertySchema(id: 10, name: r'status', type: IsarType.string),
     r'suspectCount': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'suspectCount',
       type: IsarType.long,
     ),
     r'victimCount': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'victimCount',
       type: IsarType.long,
     ),
     r'witnessCount': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'witnessCount',
       type: IsarType.long,
     ),
@@ -126,6 +131,12 @@ int _isarIncidentEstimateSize(
   }
   bytesCount += 3 + object.id.length * 3;
   bytesCount += 3 + object.incidentName.length * 3;
+  {
+    final value = object.lastInteracted;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.location.length * 3;
   bytesCount += 3 + object.startedAt.length * 3;
   bytesCount += 3 + object.startedDate.length * 3;
@@ -144,14 +155,15 @@ void _isarIncidentSerialize(
   writer.writeString(offsets[2], object.completedDate);
   writer.writeString(offsets[3], object.id);
   writer.writeString(offsets[4], object.incidentName);
-  writer.writeString(offsets[5], object.location);
-  writer.writeLong(offsets[6], object.observationCount);
-  writer.writeString(offsets[7], object.startedAt);
-  writer.writeString(offsets[8], object.startedDate);
-  writer.writeString(offsets[9], object.status);
-  writer.writeLong(offsets[10], object.suspectCount);
-  writer.writeLong(offsets[11], object.victimCount);
-  writer.writeLong(offsets[12], object.witnessCount);
+  writer.writeString(offsets[5], object.lastInteracted);
+  writer.writeString(offsets[6], object.location);
+  writer.writeLong(offsets[7], object.observationCount);
+  writer.writeString(offsets[8], object.startedAt);
+  writer.writeString(offsets[9], object.startedDate);
+  writer.writeString(offsets[10], object.status);
+  writer.writeLong(offsets[11], object.suspectCount);
+  writer.writeLong(offsets[12], object.victimCount);
+  writer.writeLong(offsets[13], object.witnessCount);
 }
 
 IsarIncident _isarIncidentDeserialize(
@@ -167,14 +179,15 @@ IsarIncident _isarIncidentDeserialize(
   object.id = reader.readString(offsets[3]);
   object.incidentName = reader.readString(offsets[4]);
   object.isarAutoId = id;
-  object.location = reader.readString(offsets[5]);
-  object.observationCount = reader.readLong(offsets[6]);
-  object.startedAt = reader.readString(offsets[7]);
-  object.startedDate = reader.readString(offsets[8]);
-  object.status = reader.readString(offsets[9]);
-  object.suspectCount = reader.readLong(offsets[10]);
-  object.victimCount = reader.readLong(offsets[11]);
-  object.witnessCount = reader.readLong(offsets[12]);
+  object.lastInteracted = reader.readStringOrNull(offsets[5]);
+  object.location = reader.readString(offsets[6]);
+  object.observationCount = reader.readLong(offsets[7]);
+  object.startedAt = reader.readString(offsets[8]);
+  object.startedDate = reader.readString(offsets[9]);
+  object.status = reader.readString(offsets[10]);
+  object.suspectCount = reader.readLong(offsets[11]);
+  object.victimCount = reader.readLong(offsets[12]);
+  object.witnessCount = reader.readLong(offsets[13]);
   return object;
 }
 
@@ -196,20 +209,22 @@ P _isarIncidentDeserializeProp<P>(
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 6:
-      return (reader.readLong(offset)) as P;
-    case 7:
       return (reader.readString(offset)) as P;
+    case 7:
+      return (reader.readLong(offset)) as P;
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
       return (reader.readString(offset)) as P;
     case 10:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 11:
       return (reader.readLong(offset)) as P;
     case 12:
+      return (reader.readLong(offset)) as P;
+    case 13:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1226,6 +1241,165 @@ extension IsarIncidentQueryFilter
   }
 
   QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'lastInteracted'),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'lastInteracted'),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'lastInteracted',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'lastInteracted',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'lastInteracted',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'lastInteracted', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
+  lastInteractedIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'lastInteracted', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterFilterCondition>
   locationEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -2084,6 +2258,20 @@ extension IsarIncidentQuerySortBy
     });
   }
 
+  QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy>
+  sortByLastInteracted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastInteracted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy>
+  sortByLastInteractedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastInteracted', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy> sortByLocation() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'location', Sort.asc);
@@ -2265,6 +2453,20 @@ extension IsarIncidentQuerySortThenBy
     });
   }
 
+  QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy>
+  thenByLastInteracted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastInteracted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy>
+  thenByLastInteractedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastInteracted', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarIncident, IsarIncident, QAfterSortBy> thenByLocation() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'location', Sort.asc);
@@ -2413,6 +2615,17 @@ extension IsarIncidentQueryWhereDistinct
     });
   }
 
+  QueryBuilder<IsarIncident, IsarIncident, QDistinct> distinctByLastInteracted({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'lastInteracted',
+        caseSensitive: caseSensitive,
+      );
+    });
+  }
+
   QueryBuilder<IsarIncident, IsarIncident, QDistinct> distinctByLocation({
     bool caseSensitive = true,
   }) {
@@ -2507,6 +2720,13 @@ extension IsarIncidentQueryProperty
   QueryBuilder<IsarIncident, String, QQueryOperations> incidentNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'incidentName');
+    });
+  }
+
+  QueryBuilder<IsarIncident, String?, QQueryOperations>
+  lastInteractedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastInteracted');
     });
   }
 

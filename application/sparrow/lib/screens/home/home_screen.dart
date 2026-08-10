@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../core/localization/app_localizations.dart';
 import '../../core/localization/locale_provider.dart';
+import '../timeline/timeline_provider.dart';
+import '../timeline/timeline_screen.dart';
 import 'home_service.dart';
 import 'home_widgets.dart';
 import 'model/home_model.dart';
@@ -12,16 +13,95 @@ import 'model/home_model.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  void _showComingSoon(BuildContext context, String feature) {
-    final loc = AppLocalizations.of(context);
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature - ${loc.text('coming_soon')}'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  void _showAddObservationBottomSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String incidentId,
+  ) async {
+    try {
+      final timelineDetails = await ref.read(timelineDetailsProvider(incidentId).future);
+      if (!context.mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => AddObservationBottomSheet(
+          timelineDetails: timelineDetails,
+          ref: ref,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load incident details: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showVictimsBottomSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String incidentId,
+  ) async {
+    try {
+      final timelineDetails = await ref.read(timelineDetailsProvider(incidentId).future);
+      if (!context.mounted) return;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      showVictimsBottomSheet(context, timelineDetails, ref, isDark);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load incident details: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showWitnessesBottomSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String incidentId,
+  ) async {
+    try {
+      final timelineDetails = await ref.read(timelineDetailsProvider(incidentId).future);
+      if (!context.mounted) return;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      showWitnessesBottomSheet(context, timelineDetails, ref, isDark);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load incident details: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showSuspectsBottomSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String incidentId,
+  ) async {
+    try {
+      final timelineDetails = await ref.read(timelineDetailsProvider(incidentId).future);
+      if (!context.mounted) return;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      showSuspectsBottomSheet(context, timelineDetails, ref, isDark);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load incident details: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -48,6 +128,51 @@ class HomeScreen extends ConsumerWidget {
                 onThemeToggleTap: () =>
                     ref.read(themeModeProvider.notifier).toggleTheme(),
               ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.red.withValues(alpha: 0.15)
+                        : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.red.shade400
+                          : Colors.red.shade700,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.red.shade400
+                            : Colors.red.shade700,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'NOTICE: THIS IS A PROTOTYPE APPLICATION INTENDED EXCLUSIVELY FOR TESTING AND EVALUATION PURPOSES.',
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.red.shade300
+                                : Colors.red.shade800,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            letterSpacing: 0.4,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -71,12 +196,27 @@ class HomeScreen extends ConsumerWidget {
                 child: QuickActionsSection(
                   quickActions: homeData.quickActions,
                   onActionTap: (action) {
-                    if (homeData.incidents.isEmpty) {
+                    if (currentIncident != null) {
+                      switch (action.actionType) {
+                        case QuickActionType.observation:
+                          _showAddObservationBottomSheet(context, ref, currentIncident.id);
+                          break;
+                        case QuickActionType.victimStatement:
+                          _showVictimsBottomSheet(context, ref, currentIncident.id);
+                          break;
+                        case QuickActionType.witnessStatement:
+                          _showWitnessesBottomSheet(context, ref, currentIncident.id);
+                          break;
+                        case QuickActionType.suspectStatement:
+                          _showSuspectsBottomSheet(context, ref, currentIncident.id);
+                          break;
+                      }
+                    } else {
                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Please start a new incident first to record ${action.title.replaceAll('\n', ' ')}.',
+                            'No active investigation found. Please start a new incident first to record ${action.title.replaceAll('\n', ' ')}.',
                           ),
                           action: SnackBarAction(
                             label: 'New Incident',
@@ -86,9 +226,6 @@ class HomeScreen extends ConsumerWidget {
                           duration: const Duration(seconds: 4),
                         ),
                       );
-                    } else {
-                      _showComingSoon(
-                          context, action.title.replaceAll('\n', ' '));
                     }
                   },
                 ),
@@ -103,7 +240,6 @@ class HomeScreen extends ConsumerWidget {
                   onStartNewIncident: () => context.go('/new-incident'),
                 ),
               ),
-
             ],
           );
         },

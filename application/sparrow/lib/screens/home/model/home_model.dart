@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../utils/time_formatter.dart';
+import '../../incidents/incidents_model.dart';
+
 enum IncidentStatus {
   active,
   completed,
@@ -47,8 +50,10 @@ class OfficerProfile {
     required this.name,
     required this.designation,
     required this.station,
-    this.district = 'Gautam Budh Nagar',
-    this.state = 'Uttar Pradesh',
+    this.district = '',
+    this.state = '',
+    this.badgeNumber = '',
+    this.phone = '',
     this.profileImage,
     this.unreadNotificationsCount = 0,
   });
@@ -58,6 +63,10 @@ class OfficerProfile {
   final String station;
   final String district;
   final String state;
+  /// Badge / service number — acts as the officer's primary identifier.
+  final String badgeNumber;
+  /// Contact phone number.
+  final String phone;
   final String? profileImage;
   final int unreadNotificationsCount;
 
@@ -66,7 +75,9 @@ class OfficerProfile {
       designation.trim().isNotEmpty &&
       station.trim().isNotEmpty &&
       district.trim().isNotEmpty &&
-      state.trim().isNotEmpty;
+      state.trim().isNotEmpty &&
+      badgeNumber.trim().isNotEmpty &&
+      phone.trim().isNotEmpty;
 
   String get initialLetter =>
       name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'O';
@@ -78,6 +89,8 @@ class OfficerProfile {
       station: json['station'] as String? ?? '',
       district: json['district'] as String? ?? '',
       state: json['state'] as String? ?? '',
+      badgeNumber: json['badge_number'] as String? ?? json['id'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
       profileImage: json['profile_image'] as String?,
       unreadNotificationsCount: json['unread_notifications_count'] as int? ?? 0,
     );
@@ -90,6 +103,8 @@ class OfficerProfile {
       'station': station,
       'district': district,
       'state': state,
+      'badge_number': badgeNumber,
+      'phone': phone,
       'profile_image': profileImage,
       'unread_notifications_count': unreadNotificationsCount,
     };
@@ -113,6 +128,7 @@ class Incident {
     required this.startedDate,
     this.completedAt,
     this.completedDate,
+    this.lastInteracted,
     required this.status,
     required this.category,
     this.rawStatus = '',
@@ -130,6 +146,7 @@ class Incident {
   final String startedDate;
   final String? completedAt;
   final String? completedDate;
+  final String? lastInteracted;
   final IncidentStatus status;
   final IncidentCategory category;
   final String rawStatus;
@@ -143,10 +160,11 @@ class Incident {
 
   /// Computed timestamp for tile subtitle display
   String get timestampInfo {
+    final formattedTime = formatTo12HourTime(startedAt);
     if (isActive) {
-      return 'Started $startedAt';
+      return 'Started $formattedTime';
     }
-    return '$startedDate • $startedAt';
+    return '$startedDate • $formattedTime';
   }
 
   IconData get icon {
@@ -190,6 +208,7 @@ class Incident {
       startedDate: json['started_date'] as String? ?? '',
       completedAt: json['completed_at'] as String?,
       completedDate: json['completed_date'] as String?,
+      lastInteracted: json['last_interacted'] as String?,
       status: IncidentStatusX.fromString(rawStatusStr),
       category: cat,
       rawStatus: rawStatusStr,
@@ -210,12 +229,9 @@ class Incident {
       'started_date': startedDate,
       'completed_at': completedAt ?? '',
       'completed_date': completedDate ?? '',
-      'status': status.name,
+      'last_interacted': lastInteracted ?? '',
+      'status': rawStatus.isNotEmpty ? rawStatus : status.name,
       'category': rawCategory.isNotEmpty ? rawCategory : category.name,
-      'observation_count': observationCount,
-      'victim_count': victimCount,
-      'witness_count': witnessCount,
-      'suspect_count': suspectCount,
     };
   }
 }
@@ -254,22 +270,22 @@ class QuickAction {
   static List<QuickAction> get defaultActions => const [
         QuickAction(
           id: 'action_obs',
-          title: 'Officer\nObservation',
+          title: 'Add Officer\nObservation',
           actionType: QuickActionType.observation,
         ),
         QuickAction(
           id: 'action_victim',
-          title: 'Victim\nStatement',
+          title: 'Add Victim\nStatement',
           actionType: QuickActionType.victimStatement,
         ),
         QuickAction(
           id: 'action_witness',
-          title: 'Witness\nStatement',
+          title: 'Add Witness\nStatement',
           actionType: QuickActionType.witnessStatement,
         ),
         QuickAction(
           id: 'action_suspect',
-          title: 'Suspect\nStatement',
+          title: 'Add Suspect\nStatement',
           actionType: QuickActionType.suspectStatement,
         ),
       ];
@@ -286,18 +302,36 @@ class HomeData {
   final List<Incident> incidents;
   final List<QuickAction> quickActions;
 
-  /// Returns the currently active investigation dynamically from incidents list
+  /// Returns the active investigation with the most recent last interaction
   Incident? get currentActiveIncident {
-    for (final incident in incidents) {
-      if (incident.isActive) {
-        return incident;
-      }
-    }
-    return null;
+    final activeIncidents = incidents.where((e) => e.isActive).toList();
+    if (activeIncidents.isEmpty) return null;
+
+    activeIncidents.sort((a, b) {
+      final dtA = _getEffectiveInteractionTime(a);
+      final dtB = _getEffectiveInteractionTime(b);
+      return dtB.compareTo(dtA);
+    });
+
+    return activeIncidents.first;
   }
 
-  /// Returns 3 most recent incidents for the Recent Incidents widget
+  static DateTime _getEffectiveInteractionTime(Incident incident) {
+    if (incident.lastInteracted != null && incident.lastInteracted!.isNotEmpty) {
+      final parsed = DateTime.tryParse(incident.lastInteracted!);
+      if (parsed != null) return parsed;
+    }
+    return parseIncidentDateTime(incident.startedDate, incident.startedAt);
+  }
+
+  /// Returns top 3 incidents sorted by most recent last_interaction
   List<Incident> get topThreeRecentIncidents {
-    return incidents.take(3).toList();
+    final sortedList = List<Incident>.from(incidents);
+    sortedList.sort((a, b) {
+      final dtA = _getEffectiveInteractionTime(a);
+      final dtB = _getEffectiveInteractionTime(b);
+      return dtB.compareTo(dtA);
+    });
+    return sortedList.take(3).toList();
   }
 }

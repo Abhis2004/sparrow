@@ -63,8 +63,8 @@ class BottomNavBar extends StatelessWidget {
                     child: _buildItem(
                       context,
                       index: 3,
-                      icon: Icons.search_rounded,
-                      label: loc.text('search'),
+                      icon: Icons.auto_awesome_rounded,
+                      label: loc.text('report_generation'),
                     ),
                   ),
                   Expanded(

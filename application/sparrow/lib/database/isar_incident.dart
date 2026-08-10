@@ -15,6 +15,7 @@ class IsarIncident {
   late String startedDate;
   String? completedAt;
   String? completedDate;
+  String? lastInteracted;
   late String status;
   late String category;
 

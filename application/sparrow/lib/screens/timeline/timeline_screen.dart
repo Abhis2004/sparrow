@@ -1,14 +1,23 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+
 
 import '../../app/colors.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../database/isar_service.dart';
 import '../../utils/map_launcher.dart';
+import '../../utils/time_formatter.dart';
 import '../home/home_service.dart';
 import '../home/model/home_model.dart';
 import '../incidents/incidents_provider.dart';
+import '../../services/location_weather_service.dart';
+import '../../widgets/full_screen_image_viewer.dart';
+import '../../widgets/full_screen_video_player.dart';
+import '../../widgets/full_screen_audio_player.dart';
 import 'timeline_model.dart';
 import 'timeline_provider.dart';
 
@@ -62,6 +71,94 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     );
   }
 
+
+  Future<void> _updateIncidentStatus(TimelineDetails details, String newStatusStr) async {
+    final currentStatusStr = details.incident.rawStatus.toLowerCase();
+    if (currentStatusStr == newStatusStr.toLowerCase()) {
+      return; // Already in this status
+    }
+
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+
+    IncidentStatus newStatusEnum;
+    switch (newStatusStr.toLowerCase()) {
+      case 'active':
+        newStatusEnum = IncidentStatus.active;
+        break;
+      case 'completed':
+        newStatusEnum = IncidentStatus.completed;
+        break;
+      default:
+        newStatusEnum = IncidentStatus.draft;
+    }
+
+    String completedAt = details.incident.completedAt;
+    String completedDate = details.incident.completedDate;
+
+    if (newStatusEnum == IncidentStatus.completed) {
+      final formattedTime = formatTo12HourTime(nowIso);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final formattedDateStr = '${now.day.toString().padLeft(2, '0')} ${months[now.month - 1]} ${now.year}';
+
+      completedAt = formattedTime;
+      completedDate = formattedDateStr;
+    }
+
+    final updatedOverview = details.incident.copyWith(
+      status: newStatusEnum,
+      rawStatus: newStatusStr.toLowerCase(),
+      completedAt: completedAt,
+      completedDate: completedDate,
+      lastInteracted: nowIso,
+    );
+
+    final statusEvent = TimelineEvent(
+      timelineId: 'tl_${now.millisecondsSinceEpoch}',
+      timestamp: nowIso,
+      eventType: 'status_change',
+      personId: details.officer.badgeNumber,
+      referenceId: '',
+      evidenceIds: const [],
+      gps: updatedOverview.gps,
+    );
+
+    final updatedDetails = TimelineDetails(
+      incident: updatedOverview,
+      officer: details.officer,
+      victims: details.victims,
+      witnesses: details.witnesses,
+      suspects: details.suspects,
+      officerObservations: details.officerObservations,
+      evidence: details.evidence,
+      timeline: [...details.timeline, statusEvent],
+    );
+
+    final rootIncident = updatedOverview.toRootIncident();
+
+    // Persist to Database 2 (Specific Timeline Details) & Database 1 (All Incidents Summary)
+    await ref
+        .read(timelineMapNotifierProvider.notifier)
+        .saveTimelineDetails(widget.incidentId, updatedDetails);
+    await ref
+        .read(allIncidentsProvider.notifier)
+        .updateIncident(rootIncident);
+
+    // Invalidate Riverpod providers for immediate UI refresh across all screens
+    ref.invalidate(timelineDetailsProvider(widget.incidentId));
+    ref.invalidate(allIncidentsProvider);
+    ref.invalidate(homeDataProvider);
+
+    if (mounted) {
+      final label = newStatusStr[0].toUpperCase() + newStatusStr.substring(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Status changed to $label'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   void _confirmDeleteIncident(BuildContext context, String incidentId) {
     final loc = AppLocalizations.of(context);
@@ -136,6 +233,19 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     );
   }
 
+  void _showAddObservationBottomSheet(BuildContext context, TimelineDetails timelineDetails) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddObservationBottomSheet(
+        timelineDetails: timelineDetails,
+        ref: ref,
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -146,22 +256,33 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final timelineDetailsAsync =
         ref.watch(timelineDetailsProvider(widget.incidentId));
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: AppBar(
-        backgroundColor: AppColors.darkSurface,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-          onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
-        ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.of(context).canPop()) {
+          context.pop();
+        } else {
+          context.go('/incidents');
+        }
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.darkSurface,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                context.pop();
+              } else {
+                context.go('/incidents');
+              }
+            },
+          ),
+
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -192,50 +313,123 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onSelected: (value) {
               final timelineDetails = timelineDetailsAsync.value;
+              if (timelineDetails == null) return;
               if (value == 'edit') {
-                if (timelineDetails != null) {
-                  _showEditIncidentBottomSheet(context, timelineDetails);
-                }
+                _showEditIncidentBottomSheet(context, timelineDetails);
+              } else if (value == 'status_active') {
+                _updateIncidentStatus(timelineDetails, 'active');
+              } else if (value == 'status_draft') {
+                _updateIncidentStatus(timelineDetails, 'draft');
+              } else if (value == 'status_completed') {
+                _updateIncidentStatus(timelineDetails, 'completed');
               } else if (value == 'delete') {
                 _confirmDeleteIncident(context, widget.incidentId);
               }
             },
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit_outlined, size: 18, color: colorScheme.primary),
-                    const SizedBox(width: 10),
-                    Text(
-                      loc.text('edit'),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
+            itemBuilder: (context) {
+              final currentStatus = timelineDetailsAsync.value?.incident.rawStatus.toLowerCase() ?? 'active';
+              return [
+                PopupMenuItem<String>(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 18, color: colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Text(
+                        loc.text('edit'),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              PopupMenuItem<String>(
-                value: 'delete',
-                child: const Row(
-                  children: [
-                    Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
-                    SizedBox(width: 10),
-                    Text(
-                      'Delete Incident',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.error,
+                const PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'status_active',
+                  child: Row(
+                    children: [
+                      Icon(
+                        currentStatus == 'active' ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        size: 18,
+                        color: const Color(0xFF10B981),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Text(
+                        'Mark as Active',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: currentStatus == 'active' ? FontWeight.bold : FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                PopupMenuItem<String>(
+                  value: 'status_draft',
+                  child: Row(
+                    children: [
+                      Icon(
+                        currentStatus == 'draft' ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        size: 18,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Mark as Draft',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: currentStatus == 'draft' ? FontWeight.bold : FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'status_completed',
+                  child: Row(
+                    children: [
+                      Icon(
+                        currentStatus == 'completed' ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        size: 18,
+                        color: const Color(0xFF3B82F6),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Mark as Completed',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: currentStatus == 'completed' ? FontWeight.bold : FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: const Row(
+                    children: [
+                      Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                      SizedBox(width: 10),
+                      Text(
+                        'Delete Incident',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ];
+            },
           ),
           const SizedBox(width: 8),
         ],
@@ -268,17 +462,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
               _MetricsBar(
                 timelineDetails: timelineDetails,
                 isDark: isDark,
+                ref: ref,
                 onMetricTap: (label) => _showComingSoon(context, '$label List'),
                 onEvidenceTap: _scrollToEvidenceSection,
+                onAddObservation: () => _showAddObservationBottomSheet(context, timelineDetails),
               ),
               const SizedBox(height: 16),
 
-              // ---------- 3. ADD / RECORD SECTION ----------
-              _AddRecordSection(
-                isDark: isDark,
-                onActionTap: (action) => _showComingSoon(context, action),
-              ),
-              const SizedBox(height: 16),
+
 
 
               // ---------- 4. INCIDENT INFORMATION CARD ----------
@@ -306,9 +497,68 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 key: _evidenceSectionKey,
                 evidenceList: timelineDetails.evidence,
                 isDark: isDark,
-                onViewAll: () => _showComingSoon(context, 'View All Evidence'),
-                onEvidenceTap: (item) =>
-                    _showComingSoon(context, 'Open ${item.fileName}'),
+                onEvidenceTap: (item) {
+                  if (item.type == EvidenceType.audio &&
+                      item.location != null &&
+                      item.location!.isNotEmpty) {
+                    FullScreenAudioPlayer.open(
+                      context,
+                      audioPath: item.location!,
+                      title: item.fileName,
+                      caption:
+                          'Captured at ${item.capturedAt} \u2022 Size: ${item.fileSize}',
+                    );
+                    return;
+                  }
+
+                  if (item.type == EvidenceType.video &&
+                      item.location != null &&
+                      item.location!.isNotEmpty) {
+                    FullScreenVideoPlayer.open(
+                      context,
+                      videoPath: item.location!,
+                      title: item.fileName,
+                      caption:
+                          'Captured at ${item.capturedAt} \u2022 Size: ${item.fileSize}',
+                    );
+                    return;
+                  }
+
+                  final photoItems = timelineDetails.evidence
+                      .where((e) =>
+                          e.type == EvidenceType.photo &&
+                          e.location != null &&
+                          e.location!.isNotEmpty)
+                      .toList();
+                  final index = photoItems.indexWhere((e) => e.id == item.id);
+                  if (index >= 0) {
+                    final viewerItems = photoItems.map((e) {
+                      return ImageViewerItem.fromPath(
+                        e.location!,
+                        title: e.fileName,
+                        caption:
+                            'Captured at ${e.capturedAt} \u2022 Size: ${e.fileSize}',
+                        heroTag: 'evidence_${e.id}',
+                      );
+                    }).toList();
+
+                    FullScreenImageViewer.open(
+                      context,
+                      items: viewerItems,
+                      initialIndex: index,
+                    );
+                  } else if (item.location != null && item.location!.isNotEmpty) {
+                    FullScreenImageViewer.openSingle(
+                      context,
+                      imagePath: item.location!,
+                      title: item.fileName,
+                      caption:
+                          'Captured at ${item.capturedAt} \u2022 Size: ${item.fileSize}',
+                    );
+                  } else {
+                    _showComingSoon(context, 'Open ${item.fileName}');
+                  }
+                },
               ),
 
               const SizedBox(height: 16),
@@ -402,8 +652,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error loading details: $err')),
       ),
-    );
-  }
+    ),
+  );
+}
+
 }
 
 
@@ -737,7 +989,7 @@ class _TopOverviewCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${incident.startedDate}, ${incident.startedAt}',
+                            '${incident.startedDate}, ${formatTo12HourTime(incident.startedAt)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -772,7 +1024,7 @@ class _TopOverviewCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${incident.completedDate}, ${incident.completedAt}',
+                            '${incident.completedDate}, ${formatTo12HourTime(incident.completedAt)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -799,14 +1051,18 @@ class _MetricsBar extends StatelessWidget {
   const _MetricsBar({
     required this.timelineDetails,
     required this.isDark,
+    required this.ref,
     required this.onMetricTap,
     this.onEvidenceTap,
+    this.onAddObservation,
   });
 
   final TimelineDetails timelineDetails;
   final bool isDark;
+  final WidgetRef ref;
   final ValueChanged<String> onMetricTap;
   final VoidCallback? onEvidenceTap;
+  final VoidCallback? onAddObservation;
 
   @override
   Widget build(BuildContext context) {
@@ -816,6 +1072,15 @@ class _MetricsBar extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
+          // Add Observation action card
+          _MetricActionCard(
+            icon: Icons.mic_rounded,
+            iconColor: const Color(0xFF2563EB),
+            label: loc.text('add_observation'),
+            isDark: isDark,
+            onTap: onAddObservation ?? () {},
+          ),
+          const SizedBox(width: 8),
           _MetricItemCard(
             icon: Icons.visibility_rounded,
             iconColor: const Color(0xFF2563EB),
@@ -824,7 +1089,8 @@ class _MetricsBar extends StatelessWidget {
             isDark: isDark,
             onTap: () => _showObservationsBottomSheet(
               context,
-              timelineDetails.officerObservations,
+              timelineDetails,
+              ref,
               isDark,
             ),
           ),
@@ -836,9 +1102,10 @@ class _MetricsBar extends StatelessWidget {
             count: timelineDetails.victims.length,
             label: loc.text('victims'),
             isDark: isDark,
-            onTap: () => _showVictimsBottomSheet(
+            onTap: () => showVictimsBottomSheet(
               context,
-              timelineDetails.victims,
+              timelineDetails,
+              ref,
               isDark,
             ),
           ),
@@ -850,9 +1117,10 @@ class _MetricsBar extends StatelessWidget {
             count: timelineDetails.witnesses.length,
             label: loc.text('witnesses'),
             isDark: isDark,
-            onTap: () => _showWitnessesBottomSheet(
+            onTap: () => showWitnessesBottomSheet(
               context,
-              timelineDetails.witnesses,
+              timelineDetails,
+              ref,
               isDark,
             ),
           ),
@@ -863,9 +1131,10 @@ class _MetricsBar extends StatelessWidget {
             count: timelineDetails.suspects.length,
             label: loc.text('suspects'),
             isDark: isDark,
-            onTap: () => _showSuspectsBottomSheet(
+            onTap: () => showSuspectsBottomSheet(
               context,
-              timelineDetails.suspects,
+              timelineDetails,
+              ref,
               isDark,
             ),
           ),
@@ -951,129 +1220,74 @@ class _MetricItemCard extends StatelessWidget {
   }
 }
 
-/// 3. Add / Record Section Component
-class _AddRecordItemData {
-  const _AddRecordItemData({
-    required this.title,
+/// Action card used in the metrics bar for quick-add buttons (e.g., Add Observation).
+class _MetricActionCard extends StatelessWidget {
+  const _MetricActionCard({
     required this.icon,
-    required this.color,
-  });
-
-  final String title;
-  final IconData icon;
-  final Color color;
-}
-
-class _AddRecordSection extends StatelessWidget {
-  const _AddRecordSection({
+    required this.iconColor,
+    required this.label,
     required this.isDark,
-    required this.onActionTap,
+    required this.onTap,
   });
 
+  final IconData icon;
+  final Color iconColor;
+  final String label;
   final bool isDark;
-  final ValueChanged<String> onActionTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final loc = AppLocalizations.of(context);
-
-    final actions = [
-      _AddRecordItemData(
-        title: loc.text('add_observation'),
-        icon: Icons.mic_rounded,
-        color: const Color(0xFF2563EB),
-      ),
-      _AddRecordItemData(
-        title: loc.text('add_victim_statement'),
-        icon: Icons.person_rounded,
-        color: const Color(0xFF16A34A),
-      ),
-      _AddRecordItemData(
-        title: loc.text('add_witness_statement'),
-        icon: Icons.person_rounded,
-        color: const Color(0xFFEA580C),
-      ),
-      _AddRecordItemData(
-        title: loc.text('add_suspect_statement'),
-        icon: Icons.face_rounded,
-        color: const Color(0xFF9333EA),
-      ),
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.border,
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            loc.text('add_record'),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 102,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: iconColor.withValues(alpha: 0.3),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 105,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: actions.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final item = actions[index];
-                return InkWell(
-                  onTap: () => onActionTap(item.title.replaceAll('\n', ' ')),
-                  borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, size: 20, color: iconColor),
+                Positioned(
+                  top: -6,
+                  right: -8,
                   child: Container(
-                    width: 95,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 8),
+                    width: 14,
+                    height: 14,
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFFFFFFFF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : AppColors.border,
-                      ),
+                      color: iconColor,
+                      shape: BoxShape.circle,
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          item.icon,
-                          size: 26,
-                          color: item.color,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          item.title,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
+                    child: const Icon(
+                      Icons.add,
+                      size: 10,
+                      color: Colors.white,
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: iconColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1183,13 +1397,13 @@ class _IncidentInformationCard extends StatelessWidget {
                     _InfoRow(
                       icon: Icons.access_time_rounded,
                       label: loc.text('started_at'),
-                      value: '${incident.startedDate}, ${incident.startedAt}',
+                      value: '${incident.startedDate}, ${formatTo12HourTime(incident.startedAt)}',
                     ),
                     const SizedBox(height: 12),
                     _InfoRow(
                       icon: Icons.check_circle_outline_rounded,
                       label: loc.text('completed_at'),
-                      value: '${incident.completedDate}, ${incident.completedAt}',
+                      value: '${incident.completedDate}, ${formatTo12HourTime(incident.completedAt)}',
                     ),
                     const SizedBox(height: 12),
                     _InfoRow(
@@ -1326,14 +1540,11 @@ class _EvidenceCollectedSection extends StatelessWidget {
     super.key,
     required this.evidenceList,
     required this.isDark,
-    required this.onViewAll,
     required this.onEvidenceTap,
   });
 
-
   final List<EvidenceItem> evidenceList;
   final bool isDark;
-  final VoidCallback onViewAll;
   final ValueChanged<EvidenceItem> onEvidenceTap;
 
   @override
@@ -1352,20 +1563,11 @@ class _EvidenceCollectedSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Evidence Collected',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextButton(
-                onPressed: onViewAll,
-                child: const Text('View All'),
-              ),
-            ],
+          Text(
+            'Evidence Collected',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -1412,19 +1614,32 @@ class _EvidenceCard extends StatelessWidget {
 
     switch (item.type) {
       case EvidenceType.photo:
-        typeLabel = 'Photo • ${item.fileSize}';
+        typeLabel = 'Photo \u2022 ${item.fileSize}';
+        final hasLocalFile = item.location != null &&
+            item.location!.isNotEmpty &&
+            File(item.location!).existsSync();
+
         thumbnailWidget = Container(
           color: const Color(0xFF334155),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              const Center(
-                child: Icon(
-                  Icons.camera_alt_rounded,
-                  color: Colors.white70,
-                  size: 32,
+              if (hasLocalFile)
+                Image.file(
+                  File(item.location!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Center(
+                    child: Icon(Icons.camera_alt_rounded, color: Colors.white70, size: 32),
+                  ),
+                )
+              else
+                const Center(
+                  child: Icon(
+                    Icons.camera_alt_rounded,
+                    color: Colors.white70,
+                    size: 32,
+                  ),
                 ),
-              ),
               Positioned(
                 top: 6,
                 left: 6,
@@ -1444,9 +1659,15 @@ class _EvidenceCard extends StatelessWidget {
         break;
 
       case EvidenceType.video:
-        typeLabel = 'Video • ${item.fileSize}';
+        typeLabel = 'Video \u2022 ${item.fileSize}';
         thumbnailWidget = Container(
-          color: const Color(0xFF1E1B4B),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1E1B4B), Color(0xFF312E81)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
           child: const Center(
             child: Icon(
               Icons.play_circle_fill_rounded,
@@ -1458,45 +1679,64 @@ class _EvidenceCard extends StatelessWidget {
         break;
 
       case EvidenceType.audio:
-        typeLabel = 'Audio • ${item.fileSize}';
+        typeLabel = 'Audio \u2022 ${item.fileSize}';
         thumbnailWidget = Container(
-          color: const Color(0xFF0F172A),
-          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF431407), Color(0xFF9A3412)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Stack(
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
+              Center(
                 child: Row(
                   children: [
-                    const Icon(Icons.mic, color: Colors.white70, size: 20),
-                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Icon(Icons.graphic_eq_rounded,
-                          color: Colors.blue.shade300, size: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: const [
+                          _AudioWaveBar(height: 12),
+                          _AudioWaveBar(height: 22),
+                          _AudioWaveBar(height: 32),
+                          _AudioWaveBar(height: 16),
+                          _AudioWaveBar(height: 28),
+                          _AudioWaveBar(height: 38),
+                          _AudioWaveBar(height: 20),
+                          _AudioWaveBar(height: 14),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              if (item.duration.isNotEmpty)
-                Positioned(
-                  bottom: 2,
-                  right: 2,
-                  child: Text(
-                    item.duration,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
             ],
           ),
         );
         break;
 
       case EvidenceType.document:
-        typeLabel = 'Document • ${item.fileSize}';
+        typeLabel = 'Document \u2022 ${item.fileSize}';
         thumbnailWidget = Container(
           color: const Color(0xFFF1F5F9),
           child: const Center(
@@ -1565,6 +1805,24 @@ class _EvidenceCard extends StatelessWidget {
   }
 }
 
+class _AudioWaveBar extends StatelessWidget {
+  const _AudioWaveBar({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 3,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+}
+
 /// 7. Individual Timeline Event Step Tile
 class _TimelineEventTile extends StatelessWidget {
   const _TimelineEventTile({
@@ -1591,6 +1849,10 @@ class _TimelineEventTile extends StatelessWidget {
         return 'Suspect Statement';
       case 'evidence_capture':
         return 'Evidence Capture';
+      case 'incident_edit':
+        return 'Incident Details Modified';
+      case 'status_change':
+        return 'Case Status Updated';
       default:
         return eventType.replaceAll('_', ' ').toUpperCase();
     }
@@ -1603,18 +1865,25 @@ class _TimelineEventTile extends StatelessWidget {
       if (event.personId.isNotEmpty) {
         parts.add('Officer: ${event.personId}');
       }
-      return parts.join(' • ');
+      return parts.join(' \u2022 ');
+    }
+    if (event.eventType == 'incident_edit') {
+      parts.add('Incident parameters updated by officer');
+      if (event.personId.isNotEmpty) {
+        parts.add('Officer: ${event.personId}');
+      }
+      return parts.join(' \u2022 ');
     }
     if (event.referenceId.isNotEmpty) {
       parts.add('Ref: ${event.referenceId}');
     }
     if (event.personId.isNotEmpty) {
-      parts.add('Person: ${event.personId}');
+      parts.add('ID: ${event.personId}');
     }
     if (parts.isEmpty && event.gps.formatted.isNotEmpty) {
       parts.add('GPS: ${event.gps.formatted}');
     }
-    return parts.isEmpty ? 'Timeline Logged Event' : parts.join(' • ');
+    return parts.isEmpty ? 'Timeline Logged Event' : parts.join(' \u2022 ');
   }
 
   @override
@@ -1650,14 +1919,20 @@ class _TimelineEventTile extends StatelessWidget {
         badgeColor = Colors.red;
         eventIcon = Icons.camera_alt_outlined;
         break;
+      case 'incident_edit':
+        badgeColor = const Color(0xFF6366F1);
+        eventIcon = Icons.edit_note_rounded;
+        break;
+      case 'status_change':
+        badgeColor = const Color(0xFFD97706);
+        eventIcon = Icons.rule_rounded;
+        break;
       default:
         badgeColor = colorScheme.primary;
         eventIcon = Icons.circle_outlined;
     }
 
-    final formattedTime = event.timestamp.contains('T')
-        ? event.timestamp.split('T')[1].split('+')[0]
-        : event.timestamp;
+    final formattedTime = formatTo12HourTime(event.timestamp);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1746,10 +2021,217 @@ class _TimelineEventTile extends StatelessWidget {
   }
 }
 
+/// Dialog for editing an Observation or Statement transcript
+void _showEditTranscriptDialog({
+  required BuildContext context,
+  required WidgetRef ref,
+  required TimelineDetails timelineDetails,
+  required String targetId,
+  required String initialTranscript,
+  required bool isObservation,
+  String personId = '',
+  String personType = '',
+}) {
+  final controller = TextEditingController(text: initialTranscript);
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final loc = AppLocalizations.of(context);
+
+  showDialog(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      title: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: isObservation
+                ? const Color(0xFF2563EB).withValues(alpha: 0.15)
+                : const Color(0xFF9333EA).withValues(alpha: 0.15),
+            child: Icon(
+              Icons.edit_note_rounded,
+              color: isObservation ? const Color(0xFF2563EB) : const Color(0xFF9333EA),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            loc.text(isObservation ? 'edit_observation' : 'edit_statement'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: controller,
+                minLines: 3,
+                maxLines: 6,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: loc.text('transcript_label'),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(),
+          child: Text(loc.text('cancel')),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isObservation ? const Color(0xFF2563EB) : const Color(0xFF9333EA),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () async {
+            final newTranscript = controller.text.trim();
+            if (newTranscript.isEmpty) return;
+
+            Navigator.of(dialogCtx).pop();
+
+            TimelineDetails updatedDetails;
+            if (isObservation) {
+              updatedDetails = timelineDetails.withUpdatedOfficerObservation(targetId, newTranscript);
+            } else {
+              updatedDetails = timelineDetails.withUpdatedPersonStatement(
+                personId,
+                personType,
+                targetId,
+                newTranscript,
+              );
+            }
+
+            final rootIncident = updatedDetails.incident.toRootIncident();
+
+            await ref
+                .read(timelineMapNotifierProvider.notifier)
+                .saveTimelineDetails(timelineDetails.incident.id, updatedDetails);
+            await ref
+                .read(allIncidentsProvider.notifier)
+                .updateIncident(rootIncident);
+
+            ref.invalidate(timelineDetailsProvider(timelineDetails.incident.id));
+            ref.invalidate(allIncidentsProvider);
+            ref.invalidate(homeDataProvider);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(loc.text(isObservation ? 'observation_updated' : 'statement_updated')),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+          child: Text(loc.text('save_changes'), style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Dialog for deleting an Observation or Statement
+void _showDeleteTranscriptDialog({
+  required BuildContext context,
+  required WidgetRef ref,
+  required TimelineDetails timelineDetails,
+  required String targetId,
+  required bool isObservation,
+  String personId = '',
+  String personType = '',
+}) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final loc = AppLocalizations.of(context);
+
+  showDialog(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      title: Row(
+        children: [
+          const CircleAvatar(
+            backgroundColor: Color(0xFFFEE2E2),
+            child: Icon(Icons.warning_amber_rounded, color: AppColors.error),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            loc.text(isObservation ? 'delete_observation' : 'delete_statement'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+        ],
+      ),
+      content: Text(
+        loc.text(isObservation ? 'delete_observation_confirm' : 'delete_statement_confirm'),
+        style: const TextStyle(fontSize: 14),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(),
+          child: Text(loc.text('cancel')),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.error,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () async {
+            Navigator.of(dialogCtx).pop();
+
+            TimelineDetails updatedDetails;
+            if (isObservation) {
+              updatedDetails = timelineDetails.withoutOfficerObservation(targetId);
+            } else {
+              updatedDetails = timelineDetails.withoutPersonStatement(
+                personId,
+                personType,
+                targetId,
+              );
+            }
+
+            final rootIncident = updatedDetails.incident.toRootIncident();
+
+            await ref
+                .read(timelineMapNotifierProvider.notifier)
+                .saveTimelineDetails(timelineDetails.incident.id, updatedDetails);
+            await ref
+                .read(allIncidentsProvider.notifier)
+                .updateIncident(rootIncident);
+
+            ref.invalidate(timelineDetailsProvider(timelineDetails.incident.id));
+            ref.invalidate(allIncidentsProvider);
+            ref.invalidate(homeDataProvider);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(loc.text(isObservation ? 'observation_deleted' : 'statement_deleted')),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+          child: Text(loc.text('delete'), style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+}
+
 /// 8. Officer Observations Bottom Sheet & Timeline Tiles
 void _showObservationsBottomSheet(
   BuildContext context,
-  List<OfficerObservationItem> observations,
+  TimelineDetails timelineDetails,
+  WidgetRef ref,
   bool isDark,
 ) {
   showModalBottomSheet(
@@ -1757,26 +2239,33 @@ void _showObservationsBottomSheet(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (context) => _OfficerObservationsBottomSheet(
-      observations: observations,
+      timelineDetails: timelineDetails,
+      ref: ref,
       isDark: isDark,
     ),
   );
 }
 
-class _OfficerObservationsBottomSheet extends StatelessWidget {
+class _OfficerObservationsBottomSheet extends ConsumerWidget {
   const _OfficerObservationsBottomSheet({
-    required this.observations,
+    required this.timelineDetails,
+    required this.ref,
     required this.isDark,
   });
 
-  final List<OfficerObservationItem> observations;
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
   final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final loc = AppLocalizations.of(context);
+
+    final liveDetailsAsync = ref.watch(timelineDetailsProvider(timelineDetails.incident.id));
+    final liveDetails = liveDetailsAsync.value ?? timelineDetails;
+    final observations = liveDetails.officerObservations.reversed.toList();
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -1866,7 +2355,7 @@ class _OfficerObservationsBottomSheet extends StatelessWidget {
                 child: observations.isEmpty
                     ? Center(
                         child: Text(
-                          'No officer observations logged.',
+                          loc.text('no_officer_observations_logged'),
                           style: TextStyle(
                             color: colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
@@ -1881,6 +2370,8 @@ class _OfficerObservationsBottomSheet extends StatelessWidget {
                           final isLast = index == observations.length - 1;
                           return _ObservationTimelineTile(
                             item: item,
+                            timelineDetails: liveDetails,
+                            ref: ref,
                             isLast: isLast,
                             isDark: isDark,
                           );
@@ -1898,11 +2389,15 @@ class _OfficerObservationsBottomSheet extends StatelessWidget {
 class _ObservationTimelineTile extends StatelessWidget {
   const _ObservationTimelineTile({
     required this.item,
+    required this.timelineDetails,
+    required this.ref,
     required this.isLast,
     required this.isDark,
   });
 
   final OfficerObservationItem item;
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
   final bool isLast;
   final bool isDark;
 
@@ -1910,10 +2405,9 @@ class _ObservationTimelineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
 
-    final formattedTime = item.timestamp.contains('T')
-        ? item.timestamp.split('T')[1].split('+')[0]
-        : item.timestamp;
+    final formattedTime = formatTo12HourTime(item.timestamp);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1980,13 +2474,70 @@ class _ObservationTimelineTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Text(
-                      formattedTime,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          formattedTime,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            size: 18,
+                            color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          onSelected: (val) {
+                            if (val == 'edit') {
+                              _showEditTranscriptDialog(
+                                context: context,
+                                ref: ref,
+                                timelineDetails: timelineDetails,
+                                targetId: item.id,
+                                initialTranscript: item.transcript,
+                                isObservation: true,
+                              );
+                            } else if (val == 'delete') {
+                              _showDeleteTranscriptDialog(
+                                context: context,
+                                ref: ref,
+                                timelineDetails: timelineDetails,
+                                targetId: item.id,
+                                isObservation: true,
+                              );
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.edit_outlined, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(loc.text('edit'), style: const TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
+                                  const SizedBox(width: 8),
+                                  Text(loc.text('delete'), style: const TextStyle(fontSize: 13, color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2020,72 +2571,75 @@ class _ObservationTimelineTile extends StatelessWidget {
                 ],
 
                 // Footer: GPS Location & Evidence Tags
-
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () => MapLauncher.openMap(
-                        latitude: item.gps.latitude,
-                        longitude: item.gps.longitude,
-                        title: 'Observation ${item.id}',
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(6),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: () => MapLauncher.openMap(
+                          latitude: item.gps.latitude,
+                          longitude: item.gps.longitude,
+                          title: 'Observation ${item.id}',
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.location_on_outlined,
-                              size: 12,
-                              color: colorScheme.primary,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              item.gps.formatted,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.location_on_outlined,
+                                size: 12,
                                 color: colorScheme.primary,
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (item.evidenceIds.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Wrap(
-                        spacing: 4,
-                        children: item.evidenceIds
-                            .map(
-                              (evId) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  evId,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.purple,
-                                  ),
+                              const SizedBox(width: 2),
+                              Text(
+                                item.gps.formatted,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
                                 ),
                               ),
-                            )
-                            .toList(),
+                            ],
+                          ),
+                        ),
                       ),
+                      if (item.evidenceIds.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Row(
+                          children: item.evidenceIds
+                              .map(
+                                (evId) => Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    evId,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
+
               ],
             ),
           ),
@@ -2095,10 +2649,411 @@ class _ObservationTimelineTile extends StatelessWidget {
   }
 }
 
-/// 9. Victims Bottom Sheet & Statements Accordion Timeline
-void _showVictimsBottomSheet(
+/// Helper to open Add Statement bottom sheet for a person
+void _showAddStatementBottomSheet(
   BuildContext context,
-  List<VictimItem> victims,
+  TimelineDetails timelineDetails,
+  WidgetRef ref,
+  String personId,
+  String personName,
+  String personType,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => AddObservationBottomSheet(
+      timelineDetails: timelineDetails,
+      ref: ref,
+      personId: personId,
+      personName: personName,
+      personType: personType,
+    ),
+  );
+}
+
+/// Dialog Popup for adding a new Victim, Witness, or Suspect
+class _AddPersonDialog extends StatefulWidget {
+  const _AddPersonDialog({
+    required this.timelineDetails,
+    required this.ref,
+    required this.personType,
+  });
+
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
+  final String personType;
+
+  @override
+  State<_AddPersonDialog> createState() => _AddPersonDialogState();
+}
+
+class _AddPersonDialogState extends State<_AddPersonDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _roleOrOccupationController = TextEditingController();
+
+  String _gender = 'Male';
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _ageController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _roleOrOccupationController.dispose();
+    super.dispose();
+  }
+
+  String _toTitleCase(String text) {
+    if (text.isEmpty) return text;
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      if (word == word.toLowerCase()) {
+        return word[0].toUpperCase() + word.substring(1);
+      }
+      return word;
+    }).join(' ');
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+    final loc = AppLocalizations.of(context);
+
+    try {
+      final name = _toTitleCase(_nameController.text.trim());
+      final age = int.tryParse(_ageController.text.trim()) ?? 0;
+      final phone = _phoneController.text.trim();
+      final address = _toTitleCase(_addressController.text.trim());
+      final extraText = _toTitleCase(_roleOrOccupationController.text.trim());
+
+      TimelineDetails updatedDetails;
+      String successKey;
+
+      if (widget.personType == 'witness') {
+        final existingCount = widget.timelineDetails.witnesses.length;
+        final autoId = 'wit_${(existingCount + 1).toString().padLeft(3, '0')}';
+        final newWitness = WitnessItem(
+          id: autoId,
+          name: name,
+          age: age,
+          gender: _gender,
+          phone: phone,
+          address: address,
+          occupation: extraText,
+          statements: const [],
+        );
+        updatedDetails = widget.timelineDetails.withWitness(newWitness);
+        successKey = 'witness_added';
+      } else if (widget.personType == 'suspect') {
+        final existingCount = widget.timelineDetails.suspects.length;
+        final autoId = 'sus_${(existingCount + 1).toString().padLeft(3, '0')}';
+        final newSuspect = SuspectItem(
+          id: autoId,
+          name: name,
+          age: age,
+          gender: _gender,
+          address: address,
+          status: extraText.isNotEmpty ? extraText : 'Suspect',
+          statements: const [],
+        );
+        updatedDetails = widget.timelineDetails.withSuspect(newSuspect);
+        successKey = 'suspect_added';
+      } else {
+        final existingCount = widget.timelineDetails.victims.length;
+        final autoId = 'vic_${(existingCount + 1).toString().padLeft(3, '0')}';
+        final newVictim = VictimItem(
+          id: autoId,
+          name: name,
+          age: age,
+          gender: _gender,
+          phone: phone,
+          address: address,
+          role: extraText,
+          statements: const [],
+        );
+        updatedDetails = widget.timelineDetails.withVictim(newVictim);
+        successKey = 'victim_added';
+      }
+
+      final rootIncident = updatedDetails.incident.toRootIncident();
+
+      await widget.ref
+          .read(timelineMapNotifierProvider.notifier)
+          .saveTimelineDetails(widget.timelineDetails.incident.id, updatedDetails);
+      await widget.ref
+          .read(allIncidentsProvider.notifier)
+          .updateIncident(rootIncident);
+
+      widget.ref.invalidate(timelineDetailsProvider(widget.timelineDetails.incident.id));
+      widget.ref.invalidate(allIncidentsProvider);
+      widget.ref.invalidate(homeDataProvider);
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(loc.text(successKey)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final loc = AppLocalizations.of(context);
+
+    String title;
+    Color accentColor;
+    String nameHint;
+    String extraLabel;
+    String extraHint;
+    IconData extraIcon;
+
+    if (widget.personType == 'witness') {
+      title = loc.text('add_witness_btn');
+      accentColor = const Color(0xFFEA580C);
+      nameHint = loc.text('person_name_hint');
+      extraLabel = loc.text('occupation');
+      extraHint = loc.text('witness_occupation_hint');
+      extraIcon = Icons.work_outline;
+    } else if (widget.personType == 'suspect') {
+      title = loc.text('add_suspect_btn');
+      accentColor = const Color(0xFF9333EA);
+      nameHint = loc.text('suspect_name_hint');
+      extraLabel = loc.text('suspect_status');
+      extraHint = loc.text('suspect_status_hint');
+      extraIcon = Icons.badge_outlined;
+    } else {
+      title = loc.text('add_victim_btn');
+      accentColor = const Color(0xFF16A34A);
+      nameHint = loc.text('person_name_hint');
+      extraLabel = loc.text('role');
+      extraHint = loc.text('victim_role_hint');
+      extraIcon = Icons.badge_outlined;
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: accentColor.withValues(alpha: 0.15),
+                      child: Icon(Icons.person_add_alt_1_rounded, color: accentColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+
+                // Name (Mandatory)
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: '${loc.text('name')} *',
+                    hintText: nameHint,
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return loc.text('name_required');
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Age & Gender (Mandatory)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        controller: _ageController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: '${loc.text('age')} *',
+                          hintText: loc.text('age_hint'),
+                          prefixIcon: const Icon(Icons.calendar_today_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return loc.text('age_required');
+                          }
+                          if (int.tryParse(val.trim()) == null) {
+                            return loc.text('valid_age');
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 1,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _gender,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: '${loc.text('gender')} *',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        ),
+                        items: [
+                          DropdownMenuItem(value: 'Male', child: Text(loc.text('male'))),
+                          DropdownMenuItem(value: 'Female', child: Text(loc.text('female'))),
+                          DropdownMenuItem(value: 'Other', child: Text(loc.text('other_gender'))),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _gender = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Phone (Optional - Victim & Witness)
+                if (widget.personType != 'suspect') ...[
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: loc.text('phone'),
+                      hintText: loc.text('phone_hint'),
+                      prefixIcon: const Icon(Icons.phone_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Address (Optional)
+                TextFormField(
+                  controller: _addressController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: loc.text('address'),
+                    hintText: loc.text('address_hint'),
+                    prefixIcon: const Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Extra field: Role / Occupation / Status (Optional)
+                TextFormField(
+                  controller: _roleOrOccupationController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: extraLabel,
+                    hintText: extraHint,
+                    prefixIcon: Icon(extraIcon),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(loc.text('cancel')),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _isSaving ? null : _submit,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: _isSaving ? accentColor.withValues(alpha: 0.5) : accentColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : Text(
+                                loc.text('save'),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 9. Victims Bottom Sheet & Statements Accordion Timeline
+void showVictimsBottomSheet(
+  BuildContext context,
+  TimelineDetails timelineDetails,
+  WidgetRef ref,
   bool isDark,
 ) {
   showModalBottomSheet(
@@ -2106,33 +3061,36 @@ void _showVictimsBottomSheet(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (context) => _VictimsBottomSheet(
-      victims: victims,
+      timelineDetails: timelineDetails,
+      ref: ref,
       isDark: isDark,
     ),
   );
 }
 
-class _VictimsBottomSheet extends StatefulWidget {
+class _VictimsBottomSheet extends ConsumerStatefulWidget {
   const _VictimsBottomSheet({
-    required this.victims,
+    required this.timelineDetails,
+    required this.ref,
     required this.isDark,
   });
 
-  final List<VictimItem> victims;
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
   final bool isDark;
 
   @override
-  State<_VictimsBottomSheet> createState() => _VictimsBottomSheetState();
+  ConsumerState<_VictimsBottomSheet> createState() => _VictimsBottomSheetState();
 }
 
-class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
+class _VictimsBottomSheetState extends ConsumerState<_VictimsBottomSheet> {
   String? _expandedVictimId;
 
   @override
   void initState() {
     super.initState();
-    if (widget.victims.isNotEmpty) {
-      _expandedVictimId = widget.victims.first.id;
+    if (widget.timelineDetails.victims.isNotEmpty) {
+      _expandedVictimId = widget.timelineDetails.victims.last.id;
     }
   }
 
@@ -2141,6 +3099,11 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final loc = AppLocalizations.of(context);
+
+    final liveDetailsAsync = ref.watch(timelineDetailsProvider(widget.timelineDetails.incident.id));
+    final liveDetails = liveDetailsAsync.value ?? widget.timelineDetails;
+    final victims = liveDetails.victims.reversed.toList();
+    const accentColor = Color(0xFF16A34A);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -2175,7 +3138,7 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
               ),
               const SizedBox(height: 12),
 
-              // Header Row
+              // Header Row with "Add Victim" Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -2184,12 +3147,12 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                        color: accentColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.people_alt_rounded,
-                        color: Color(0xFF16A34A),
+                        color: accentColor,
                         size: 22,
                       ),
                     ),
@@ -2206,7 +3169,7 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
                             ),
                           ),
                           Text(
-                            '${widget.victims.length} ${loc.text('victims')}',
+                            '${victims.length} ${loc.text('victims')}',
                             style: TextStyle(
                               fontSize: 12,
                               color: colorScheme.onSurface.withValues(alpha: 0.6),
@@ -2215,6 +3178,42 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
                         ],
                       ),
                     ),
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          useRootNavigator: true,
+                          builder: (ctx) => _AddPersonDialog(
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
+                            personType: 'victim',
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.person_add_rounded, size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              loc.text('add_victim_btn'),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.close_rounded),
                       onPressed: () => Navigator.of(context).pop(),
@@ -2227,33 +3226,90 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
 
               // Victims Accordion List
               Expanded(
-                child: widget.victims.isEmpty
+                child: victims.isEmpty
                     ? Center(
-                        child: Text(
-                          'No victims recorded.',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_off_outlined,
+                              size: 48,
+                              color: colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              loc.text('no_victims_recorded'),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  useRootNavigator: true,
+                                  builder: (ctx) => _AddPersonDialog(
+                                    timelineDetails: liveDetails,
+                                    ref: widget.ref,
+                                    personType: 'victim',
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: accentColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.person_add_rounded, size: 18, color: Colors.white),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      loc.text('add_victim_btn'),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
                         controller: scrollController,
                         padding: const EdgeInsets.all(20),
-                        itemCount: widget.victims.length,
+                        itemCount: victims.length,
                         itemBuilder: (context, index) {
-                          final victim = widget.victims[index];
+                          final victim = victims[index];
                           final isExpanded = _expandedVictimId == victim.id;
-                          return _VictimCard(
-                            victim: victim,
+                          return _PersonCard(
+                            personId: victim.id,
+                            name: victim.name,
+                            subtitle: victim.role,
+                            age: victim.age,
+                            gender: victim.gender,
+                            phone: victim.phone,
+                            address: victim.address,
+                            statements: victim.statements,
+                            accentColor: accentColor,
+                            avatarLetter: 'V',
+                            personType: 'victim',
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
                             isExpanded: isExpanded,
                             isDark: widget.isDark,
                             onToggleExpand: () {
                               setState(() {
-                                if (isExpanded) {
-                                  _expandedVictimId = null;
-                                } else {
-                                  _expandedVictimId = victim.id;
-                                }
+                                _expandedVictimId = isExpanded ? null : victim.id;
                               });
                             },
                           );
@@ -2268,15 +3324,589 @@ class _VictimsBottomSheetState extends State<_VictimsBottomSheet> {
   }
 }
 
-class _VictimCard extends StatelessWidget {
-  const _VictimCard({
-    required this.victim,
+/// 10. Witnesses Bottom Sheet & Statements Accordion Timeline
+void showWitnessesBottomSheet(
+  BuildContext context,
+  TimelineDetails timelineDetails,
+  WidgetRef ref,
+  bool isDark,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => _WitnessesBottomSheet(
+      timelineDetails: timelineDetails,
+      ref: ref,
+      isDark: isDark,
+    ),
+  );
+}
+
+class _WitnessesBottomSheet extends ConsumerStatefulWidget {
+  const _WitnessesBottomSheet({
+    required this.timelineDetails,
+    required this.ref,
+    required this.isDark,
+  });
+
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
+  final bool isDark;
+
+  @override
+  ConsumerState<_WitnessesBottomSheet> createState() => _WitnessesBottomSheetState();
+}
+
+class _WitnessesBottomSheetState extends ConsumerState<_WitnessesBottomSheet> {
+  String? _expandedWitnessId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.timelineDetails.witnesses.isNotEmpty) {
+      _expandedWitnessId = widget.timelineDetails.witnesses.last.id;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
+
+    final liveDetailsAsync = ref.watch(timelineDetailsProvider(widget.timelineDetails.incident.id));
+    final liveDetails = liveDetailsAsync.value ?? widget.timelineDetails;
+    final witnesses = liveDetails.witnesses.reversed.toList();
+    const accentColor = Color(0xFFEA580C);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Drag Handle
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: widget.isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Header Row with "Add Witness" Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.people_alt_rounded,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            loc.text('witnesses'),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            '${witnesses.length} ${loc.text('witnesses')}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          useRootNavigator: true,
+                          builder: (ctx) => _AddPersonDialog(
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
+                            personType: 'witness',
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.person_add_rounded, size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              loc.text('add_witness_btn'),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+
+              // Witnesses Accordion List
+              Expanded(
+                child: witnesses.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_off_outlined,
+                              size: 48,
+                              color: colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              loc.text('no_witnesses_recorded'),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  useRootNavigator: true,
+                                  builder: (ctx) => _AddPersonDialog(
+                                    timelineDetails: liveDetails,
+                                    ref: widget.ref,
+                                    personType: 'witness',
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: accentColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.person_add_rounded, size: 18, color: Colors.white),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      loc.text('add_witness_btn'),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(20),
+                        itemCount: witnesses.length,
+                        itemBuilder: (context, index) {
+                          final witness = witnesses[index];
+                          final isExpanded = _expandedWitnessId == witness.id;
+                          return _PersonCard(
+                            personId: witness.id,
+                            name: witness.name,
+                            subtitle: witness.occupation,
+                            age: witness.age,
+                            gender: witness.gender,
+                            phone: witness.phone,
+                            address: witness.address,
+                            statements: witness.statements,
+                            accentColor: accentColor,
+                            avatarLetter: 'W',
+                            personType: 'witness',
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
+                            isExpanded: isExpanded,
+                            isDark: widget.isDark,
+                            onToggleExpand: () {
+                              setState(() {
+                                _expandedWitnessId = isExpanded ? null : witness.id;
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 11. Suspects Bottom Sheet & Statements Accordion Timeline
+void showSuspectsBottomSheet(
+  BuildContext context,
+  TimelineDetails timelineDetails,
+  WidgetRef ref,
+  bool isDark,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => _SuspectsBottomSheet(
+      timelineDetails: timelineDetails,
+      ref: ref,
+      isDark: isDark,
+    ),
+  );
+}
+
+class _SuspectsBottomSheet extends ConsumerStatefulWidget {
+  const _SuspectsBottomSheet({
+    required this.timelineDetails,
+    required this.ref,
+    required this.isDark,
+  });
+
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
+  final bool isDark;
+
+  @override
+  ConsumerState<_SuspectsBottomSheet> createState() => _SuspectsBottomSheetState();
+}
+
+class _SuspectsBottomSheetState extends ConsumerState<_SuspectsBottomSheet> {
+  String? _expandedSuspectId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.timelineDetails.suspects.isNotEmpty) {
+      _expandedSuspectId = widget.timelineDetails.suspects.last.id;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
+
+    final liveDetailsAsync = ref.watch(timelineDetailsProvider(widget.timelineDetails.incident.id));
+    final liveDetails = liveDetailsAsync.value ?? widget.timelineDetails;
+    final suspects = liveDetails.suspects.reversed.toList();
+    const accentColor = Color(0xFF9333EA);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 16,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Drag Handle
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: widget.isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Header Row with "Add Suspect" Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.face_rounded,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            loc.text('suspects'),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            '${suspects.length} ${loc.text('suspects')}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          useRootNavigator: true,
+                          builder: (ctx) => _AddPersonDialog(
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
+                            personType: 'suspect',
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.person_add_rounded, size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              loc.text('add_suspect_btn'),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+
+              // Suspects Accordion List
+              Expanded(
+                child: suspects.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_off_outlined,
+                              size: 48,
+                              color: colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              loc.text('no_suspects_recorded'),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  useRootNavigator: true,
+                                  builder: (ctx) => _AddPersonDialog(
+                                    timelineDetails: liveDetails,
+                                    ref: widget.ref,
+                                    personType: 'suspect',
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: accentColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.person_add_rounded, size: 18, color: Colors.white),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      loc.text('add_suspect_btn'),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(20),
+                        itemCount: suspects.length,
+                        itemBuilder: (context, index) {
+                          final suspect = suspects[index];
+                          final isExpanded = _expandedSuspectId == suspect.id;
+                          return _PersonCard(
+                            personId: suspect.id,
+                            name: suspect.name,
+                            subtitle: suspect.status.isNotEmpty ? suspect.status : 'Suspect',
+                            age: suspect.age,
+                            gender: suspect.gender,
+                            address: suspect.address,
+                            statements: suspect.statements,
+                            accentColor: accentColor,
+                            avatarLetter: 'S',
+                            personType: 'suspect',
+                            timelineDetails: liveDetails,
+                            ref: widget.ref,
+                            isExpanded: isExpanded,
+                            isDark: widget.isDark,
+                            onToggleExpand: () {
+                              setState(() {
+                                _expandedSuspectId = isExpanded ? null : suspect.id;
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Reusable Person Card for Victims, Witnesses, and Suspects
+class _PersonCard extends StatelessWidget {
+  const _PersonCard({
+    required this.personId,
+    required this.name,
+    this.subtitle,
+    required this.age,
+    required this.gender,
+    this.phone,
+    this.address,
+    required this.statements,
+    required this.accentColor,
+    required this.avatarLetter,
+    required this.personType,
+    required this.timelineDetails,
+    required this.ref,
     required this.isExpanded,
     required this.isDark,
     required this.onToggleExpand,
   });
 
-  final VictimItem victim;
+  final String personId;
+  final String name;
+  final String? subtitle;
+  final int age;
+  final String gender;
+  final String? phone;
+  final String? address;
+  final List<PersonStatement> statements;
+  final Color accentColor;
+  final String avatarLetter;
+  final String personType;
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
   final bool isExpanded;
   final bool isDark;
   final VoidCallback onToggleExpand;
@@ -2285,6 +3915,7 @@ class _VictimCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -2294,7 +3925,7 @@ class _VictimCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isExpanded
-              ? const Color(0xFF16A34A)
+              ? accentColor
               : (isDark
                   ? Colors.white.withValues(alpha: 0.08)
                   : AppColors.border),
@@ -2303,7 +3934,7 @@ class _VictimCard extends StatelessWidget {
         boxShadow: isExpanded
             ? [
                 BoxShadow(
-                  color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                  color: accentColor.withValues(alpha: 0.12),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )
@@ -2312,7 +3943,7 @@ class _VictimCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Header Row (Always Visible)
+          // Header Row
           InkWell(
             onTap: onToggleExpand,
             borderRadius: BorderRadius.circular(18),
@@ -2323,16 +3954,13 @@ class _VictimCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor:
-                        const Color(0xFF16A34A).withValues(alpha: 0.15),
+                    backgroundColor: accentColor.withValues(alpha: 0.15),
                     child: Text(
-                      victim.name.isNotEmpty
-                          ? victim.name[0].toUpperCase()
-                          : 'V',
-                      style: const TextStyle(
+                      name.isNotEmpty ? name[0].toUpperCase() : avatarLetter,
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF16A34A),
+                        color: accentColor,
                       ),
                     ),
                   ),
@@ -2345,7 +3973,7 @@ class _VictimCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                victim.name,
+                                name,
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -2356,25 +3984,24 @@ class _VictimCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF16A34A)
-                                    .withValues(alpha: 0.1),
+                                color: accentColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                '${victim.statements.length} Statements',
-                                style: const TextStyle(
+                                '${statements.length} Statements',
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF16A34A),
+                                  color: accentColor,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        if (victim.role.isNotEmpty) ...[
+                        if (subtitle != null && subtitle!.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            victim.role,
+                            subtitle!,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -2388,62 +4015,56 @@ class _VictimCard extends StatelessWidget {
                             Icon(
                               Icons.person_outline,
                               size: 13,
-                              color:
-                                  colorScheme.onSurface.withValues(alpha: 0.5),
+                              color: colorScheme.onSurface.withValues(alpha: 0.5),
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '${victim.age} Yrs • ${victim.gender}',
+                              '$age ${loc.text('yrs')} • $gender',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.7),
+                                color: colorScheme.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
-                            if (victim.phone.isNotEmpty) ...[
+                            if (phone != null && phone!.isNotEmpty) ...[
                               const SizedBox(width: 10),
                               Icon(
                                 Icons.phone_outlined,
                                 size: 13,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
+                                color: colorScheme.onSurface.withValues(alpha: 0.5),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  victim.phone,
+                                  phone!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: colorScheme.onSurface
-                                        .withValues(alpha: 0.7),
+                                    color: colorScheme.onSurface.withValues(alpha: 0.7),
                                   ),
                                 ),
                               ),
                             ],
                           ],
                         ),
-                        if (victim.address.isNotEmpty) ...[
+                        if (address != null && address!.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Row(
                             children: [
                               Icon(
                                 Icons.location_on_outlined,
                                 size: 13,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
+                                color: colorScheme.onSurface.withValues(alpha: 0.5),
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  victim.address,
+                                  address!,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
+                                    color: colorScheme.onSurface.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ),
@@ -2458,9 +4079,7 @@ class _VictimCard extends StatelessWidget {
                     isExpanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: isExpanded
-                        ? const Color(0xFF16A34A)
-                        : colorScheme.onSurface.withValues(alpha: 0.5),
+                    color: isExpanded ? accentColor : colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ],
               ),
@@ -2475,28 +4094,59 @@ class _VictimCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  GestureDetector(
+                    onTap: () => _showAddStatementBottomSheet(
+                      context,
+                      timelineDetails,
+                      ref,
+                      personId,
+                      name,
+                      personType,
+                    ),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.mic_rounded, size: 16, color: accentColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            loc.text('add_statement'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: accentColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.record_voice_over_outlined,
-                        size: 16,
-                        color: Color(0xFF16A34A),
-                      ),
+                      Icon(Icons.record_voice_over_outlined, size: 16, color: accentColor),
                       const SizedBox(width: 6),
                       Text(
-                        'Recorded Statements (${victim.statements.length})',
-                        style: const TextStyle(
+                        '${loc.text('recorded_statements')} (${statements.length})',
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF16A34A),
+                          color: accentColor,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (victim.statements.isEmpty)
+                  if (statements.isEmpty)
                     Text(
-                      'No recorded statements.',
+                      loc.text('no_recorded_statements'),
                       style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurface.withValues(alpha: 0.6),
@@ -2506,15 +4156,19 @@ class _VictimCard extends StatelessWidget {
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: victim.statements.length,
+                      itemCount: statements.length,
                       itemBuilder: (context, index) {
-                        final statement = victim.statements[index];
-                        final isLast = index == victim.statements.length - 1;
+                        final statement = statements[index];
+                        final isLast = index == statements.length - 1;
                         return _StatementTimelineTile(
                           statement: statement,
+                          personId: personId,
+                          personType: personType,
+                          timelineDetails: timelineDetails,
+                          ref: ref,
                           isLast: isLast,
                           isDark: isDark,
-                          accentColor: const Color(0xFF16A34A),
+                          accentColor: accentColor,
                         );
                       },
                     ),
@@ -2531,12 +4185,20 @@ class _VictimCard extends StatelessWidget {
 class _StatementTimelineTile extends StatelessWidget {
   const _StatementTimelineTile({
     required this.statement,
+    required this.personId,
+    required this.personType,
+    required this.timelineDetails,
+    required this.ref,
     required this.isLast,
     required this.isDark,
     required this.accentColor,
   });
 
   final PersonStatement statement;
+  final String personId;
+  final String personType;
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
   final bool isLast;
   final bool isDark;
   final Color accentColor;
@@ -2545,10 +4207,8 @@ class _StatementTimelineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    final formattedTime = statement.timestamp.contains('T')
-        ? statement.timestamp.split('T')[1].split('+')[0]
-        : statement.timestamp;
+    final loc = AppLocalizations.of(context);
+    final formattedTime = formatTo12HourTime(statement.timestamp);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2616,17 +4276,77 @@ class _StatementTimelineTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Text(
-                      formattedTime,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          formattedTime,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            size: 18,
+                            color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          onSelected: (val) {
+                            if (val == 'edit') {
+                              _showEditTranscriptDialog(
+                                context: context,
+                                ref: ref,
+                                timelineDetails: timelineDetails,
+                                targetId: statement.statementId,
+                                initialTranscript: statement.transcript,
+                                isObservation: false,
+                                personId: personId,
+                                personType: personType,
+                              );
+                            } else if (val == 'delete') {
+                              _showDeleteTranscriptDialog(
+                                context: context,
+                                ref: ref,
+                                timelineDetails: timelineDetails,
+                                targetId: statement.statementId,
+                                isObservation: false,
+                                personId: personId,
+                                personType: personType,
+                              );
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.edit_outlined, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(loc.text('edit'), style: const TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.error),
+                                  const SizedBox(width: 8),
+                                  Text(loc.text('delete'), style: const TextStyle(fontSize: 13, color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
 
                 // Transcript Text
@@ -2642,938 +4362,80 @@ class _StatementTimelineTile extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Footer: GPS Location & Evidence Tags
-                Row(
-                  children: [
-                    if (statement.gps != null)
-                      InkWell(
-                        onTap: () => MapLauncher.openMap(
-                          latitude: statement.gps!.latitude,
-                          longitude: statement.gps!.longitude,
-                          title: 'Statement ${statement.statementId}',
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(6),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      if (statement.gps != null)
+                        InkWell(
+                          onTap: () => MapLauncher.openMap(
+                            latitude: statement.gps!.latitude,
+                            longitude: statement.gps!.longitude,
+                            title: 'Statement ${statement.statementId}',
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                size: 12,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                statement.gps!.formatted,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.location_on_outlined,
+                                  size: 12,
                                   color: colorScheme.primary,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    if (statement.evidenceIds.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Wrap(
-                        spacing: 4,
-                        children: statement.evidenceIds
-                            .map(
-                              (evId) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  evId,
-                                  style: const TextStyle(
+                                const SizedBox(width: 2),
+                                Text(
+                                  statement.gps!.formatted,
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.purple,
+                                    color: colorScheme.primary,
                                   ),
                                 ),
-                              ),
-                            )
-                            .toList(),
-                      ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (statement.evidenceIds.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Row(
+                          children: statement.evidenceIds
+                              .map(
+                                (evId) => Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    evId,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.purple,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 10. Witnesses Bottom Sheet & Statements Accordion Timeline
-void _showWitnessesBottomSheet(
-  BuildContext context,
-  List<WitnessItem> witnesses,
-  bool isDark,
-) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => _WitnessesBottomSheet(
-      witnesses: witnesses,
-      isDark: isDark,
-    ),
-  );
-}
-
-class _WitnessesBottomSheet extends StatefulWidget {
-  const _WitnessesBottomSheet({
-    required this.witnesses,
-    required this.isDark,
-  });
-
-  final List<WitnessItem> witnesses;
-  final bool isDark;
-
-  @override
-  State<_WitnessesBottomSheet> createState() => _WitnessesBottomSheetState();
-}
-
-class _WitnessesBottomSheetState extends State<_WitnessesBottomSheet> {
-  String? _expandedWitnessId;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.witnesses.isNotEmpty) {
-      _expandedWitnessId = widget.witnesses.first.id;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final loc = AppLocalizations.of(context);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Drag Handle
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: widget.isDark ? Colors.white24 : Colors.black12,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Header Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEA580C).withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.people_alt_rounded,
-                        color: Color(0xFFEA580C),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            loc.text('witnesses'),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          Text(
-                            '${widget.witnesses.length} ${loc.text('witnesses')}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(height: 1),
-
-              // Witnesses Accordion List
-              Expanded(
-                child: widget.witnesses.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No witnesses recorded.',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.all(20),
-                        itemCount: widget.witnesses.length,
-                        itemBuilder: (context, index) {
-                          final witness = widget.witnesses[index];
-                          final isExpanded = _expandedWitnessId == witness.id;
-                          return _WitnessCard(
-                            witness: witness,
-                            isExpanded: isExpanded,
-                            isDark: widget.isDark,
-                            onToggleExpand: () {
-                              setState(() {
-                                if (isExpanded) {
-                                  _expandedWitnessId = null;
-                                } else {
-                                  _expandedWitnessId = witness.id;
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _WitnessCard extends StatelessWidget {
-  const _WitnessCard({
-    required this.witness,
-    required this.isExpanded,
-    required this.isDark,
-    required this.onToggleExpand,
-  });
-
-  final WitnessItem witness;
-  final bool isExpanded;
-  final bool isDark;
-  final VoidCallback onToggleExpand;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isExpanded
-              ? const Color(0xFFEA580C)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : AppColors.border),
-          width: isExpanded ? 1.5 : 1.0,
-        ),
-        boxShadow: isExpanded
-            ? [
-                BoxShadow(
-                  color: const Color(0xFFEA580C).withValues(alpha: 0.12),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : null,
-      ),
-      child: Column(
-        children: [
-          // Header Row
-          InkWell(
-            onTap: onToggleExpand,
-            borderRadius: BorderRadius.circular(18),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor:
-                        const Color(0xFFEA580C).withValues(alpha: 0.15),
-                    child: Text(
-                      witness.name.isNotEmpty
-                          ? witness.name[0].toUpperCase()
-                          : 'W',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFEA580C),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                witness.name,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEA580C)
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${witness.statements.length} Statements',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFEA580C),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (witness.occupation.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            witness.occupation,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline,
-                              size: 13,
-                              color:
-                                  colorScheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${witness.age} Yrs • ${witness.gender}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                            if (witness.phone.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              Icon(
-                                Icons.phone_outlined,
-                                size: 13,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  witness.phone,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colorScheme.onSurface
-                                        .withValues(alpha: 0.7),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (witness.address.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                size: 13,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  witness.address,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: isExpanded
-                        ? const Color(0xFFEA580C)
-                        : colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expanded Statements Timeline Section
-          if (isExpanded) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.record_voice_over_outlined,
-                        size: 16,
-                        color: Color(0xFFEA580C),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Recorded Statements (${witness.statements.length})',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFEA580C),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (witness.statements.isEmpty)
-                    Text(
-                      'No recorded statements.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: witness.statements.length,
-                      itemBuilder: (context, index) {
-                        final statement = witness.statements[index];
-                        final isLast = index == witness.statements.length - 1;
-                        return _StatementTimelineTile(
-                          statement: statement,
-                          isLast: isLast,
-                          isDark: isDark,
-                          accentColor: const Color(0xFFEA580C),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 11. Suspects Bottom Sheet & Statements Accordion Timeline
-void _showSuspectsBottomSheet(
-  BuildContext context,
-  List<SuspectItem> suspects,
-  bool isDark,
-) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => _SuspectsBottomSheet(
-      suspects: suspects,
-      isDark: isDark,
-    ),
-  );
-}
-
-class _SuspectsBottomSheet extends StatefulWidget {
-  const _SuspectsBottomSheet({
-    required this.suspects,
-    required this.isDark,
-  });
-
-  final List<SuspectItem> suspects;
-  final bool isDark;
-
-  @override
-  State<_SuspectsBottomSheet> createState() => _SuspectsBottomSheetState();
-}
-
-class _SuspectsBottomSheetState extends State<_SuspectsBottomSheet> {
-  String? _expandedSuspectId;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.suspects.isNotEmpty) {
-      _expandedSuspectId = widget.suspects.first.id;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final loc = AppLocalizations.of(context);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Drag Handle
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: widget.isDark ? Colors.white24 : Colors.black12,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Header Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF9333EA).withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.face_rounded,
-                        color: Color(0xFF9333EA),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            loc.text('suspects'),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          Text(
-                            '${widget.suspects.length} ${loc.text('suspects')}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(height: 1),
-
-              // Suspects Accordion List
-              Expanded(
-                child: widget.suspects.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No suspects recorded.',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.all(20),
-                        itemCount: widget.suspects.length,
-                        itemBuilder: (context, index) {
-                          final suspect = widget.suspects[index];
-                          final isExpanded = _expandedSuspectId == suspect.id;
-                          return _SuspectCard(
-                            suspect: suspect,
-                            isExpanded: isExpanded,
-                            isDark: widget.isDark,
-                            onToggleExpand: () {
-                              setState(() {
-                                if (isExpanded) {
-                                  _expandedSuspectId = null;
-                                } else {
-                                  _expandedSuspectId = suspect.id;
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _SuspectCard extends StatelessWidget {
-  const _SuspectCard({
-    required this.suspect,
-    required this.isExpanded,
-    required this.isDark,
-    required this.onToggleExpand,
-  });
-
-  final SuspectItem suspect;
-  final bool isExpanded;
-  final bool isDark;
-  final VoidCallback onToggleExpand;
-
-  Color _getStatusColor(String status) {
-    return const Color(0xFF9333EA);
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final statusColor = _getStatusColor(suspect.status);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isExpanded
-              ? const Color(0xFF9333EA)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : AppColors.border),
-          width: isExpanded ? 1.5 : 1.0,
-        ),
-        boxShadow: isExpanded
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF9333EA).withValues(alpha: 0.12),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : null,
-      ),
-      child: Column(
-        children: [
-          // Header Row
-          InkWell(
-            onTap: onToggleExpand,
-            borderRadius: BorderRadius.circular(18),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor:
-                        const Color(0xFF9333EA).withValues(alpha: 0.15),
-                    child: Text(
-                      suspect.name.isNotEmpty
-                          ? suspect.name[0].toUpperCase()
-                          : 'S',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF9333EA),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                suspect.name,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: statusColor.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Text(
-                                suspect.status.isNotEmpty
-                                    ? suspect.status
-                                    : 'Suspect',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline,
-                              size: 13,
-                              color:
-                                  colorScheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${suspect.age} Yrs • ${suspect.gender}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF9333EA)
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${suspect.statements.length} Statements',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF9333EA),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (suspect.address.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                size: 13,
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  suspect.address,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: isExpanded
-                        ? const Color(0xFF9333EA)
-                        : colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expanded Statements Timeline Section
-          if (isExpanded) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.record_voice_over_outlined,
-                        size: 16,
-                        color: Color(0xFF9333EA),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Recorded Statements (${suspect.statements.length})',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF9333EA),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (suspect.statements.isEmpty)
-                    Text(
-                      'No recorded statements.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: suspect.statements.length,
-                      itemBuilder: (context, index) {
-                        final statement = suspect.statements[index];
-                        final isLast = index == suspect.statements.length - 1;
-                        return _StatementTimelineTile(
-                          statement: statement,
-                          isLast: isLast,
-                          isDark: isDark,
-                          accentColor: const Color(0xFF9333EA),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -3907,6 +4769,866 @@ class _EditIncidentBottomSheetState extends State<_EditIncidentBottomSheet> {
     );
   }
 }
+
+
+/// Modal Bottom Sheet for adding Officer Observation with Audio/Text & Evidence
+class AddObservationBottomSheet extends StatefulWidget {
+  const AddObservationBottomSheet({
+    super.key,
+    required this.timelineDetails,
+    required this.ref,
+    this.personId,
+    this.personName,
+    this.personType,
+  });
+
+  final TimelineDetails timelineDetails;
+  final WidgetRef ref;
+  final String? personId;
+  final String? personName;
+  final String? personType;
+
+  @override
+  State<AddObservationBottomSheet> createState() => _AddObservationBottomSheetState();
+}
+
+class _AddObservationBottomSheetState extends State<AddObservationBottomSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _transcriptController = TextEditingController();
+
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  bool _speechAvailable = false;
+  bool _isSaving = false;
+  String _selectedLanguage = 'English';
+
+  final List<EvidenceItem> _addedEvidenceList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+    _initSpeech();
+  }
+
+  @override
+  void dispose() {
+    _transcriptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      bool available = await _speech.initialize(
+        onError: (val) {
+          if (mounted) {
+            setState(() => _isListening = false);
+          }
+        },
+        onStatus: (val) {
+          if (mounted) {
+            setState(() {
+              _isListening = (val == 'listening');
+            });
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _speechAvailable = available;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _speechAvailable = false;
+        });
+      }
+    }
+  }
+
+  void _toggleListening() async {
+    if (!_speechAvailable) {
+      await _initSpeech();
+      if (!_speechAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Speech recognition is not available or enabled on this device.'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
+    } else {
+      final initialText = _transcriptController.text.trim();
+      final localeId = _selectedLanguage == 'Hindi' ? 'hi_IN' : 'en_IN';
+
+      if (mounted) {
+        setState(() => _isListening = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Listening in $_selectedLanguage... Speak now'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
+      await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          localeId: localeId,
+          partialResults: true,
+          cancelOnError: true,
+          listenMode: stt.ListenMode.dictation,
+        ),
+        onResult: (result) {
+          if (mounted) {
+            final recognized = result.recognizedWords;
+            if (recognized.isNotEmpty) {
+              final newText = initialText.isEmpty
+                  ? recognized
+                  : '$initialText $recognized';
+              setState(() {
+                _transcriptController.value = TextEditingValue(
+                  text: newText,
+                  selection: TextSelection.collapsed(offset: newText.length),
+                );
+              });
+            }
+            if (result.finalResult || !_speech.isListening) {
+              setState(() {
+                _isListening = false;
+              });
+            }
+          }
+        },
+      );
+    }
+  }
+
+
+  Future<GpsLocation> _getCurrentDeviceGps() async {
+    try {
+      final available = await LocationWeatherService.isLocationAvailable();
+      if (available) {
+        final locData = await LocationWeatherService.fetchLocationAndWeather();
+        return GpsLocation(
+          latitude: locData.latitude,
+          longitude: locData.longitude,
+        );
+      }
+    } catch (_) {}
+    return widget.timelineDetails.incident.gps;
+  }
+
+  Future<void> _addPhotoEvidence() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (photo == null) return;
+
+      final GpsLocation currentGps = await _getCurrentDeviceGps();
+      final newId = 'photo_evidence_${DateTime.now().millisecondsSinceEpoch}';
+      final fileLength = await photo.length();
+      final double mbSize = fileLength / (1024 * 1024);
+      final String sizeStr = fileLength > 0
+          ? (mbSize >= 1.0 ? '${mbSize.toStringAsFixed(1)} MB' : '${(fileLength / 1024).toStringAsFixed(0)} KB')
+          : '2.4 MB';
+
+      final item = EvidenceItem(
+        id: newId,
+        type: EvidenceType.photo,
+        fileName: photo.name.isNotEmpty ? photo.name : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        location: photo.path,
+        description: 'Photo evidence captured during officer observation',
+        capturedAt: DateTime.now().toIso8601String(),
+        gps: currentGps,
+        capturedBy: widget.timelineDetails.officer.badgeNumber,
+        fileSize: sizeStr,
+      );
+
+      if (mounted) {
+        setState(() {
+          _addedEvidenceList.add(item);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to take photo: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addVideoEvidence() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? video = await picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 10),
+      );
+      if (video == null) return;
+
+      final GpsLocation currentGps = await _getCurrentDeviceGps();
+      final newId = 'video_evidence_${DateTime.now().millisecondsSinceEpoch}';
+      final fileLength = await video.length();
+      final double mbSize = fileLength / (1024 * 1024);
+      final String sizeStr = fileLength > 0
+          ? (mbSize >= 1.0 ? '${mbSize.toStringAsFixed(1)} MB' : '${(fileLength / 1024).toStringAsFixed(0)} KB')
+          : '18.7 MB';
+
+      final item = EvidenceItem(
+        id: newId,
+        type: EvidenceType.video,
+        fileName: video.name.isNotEmpty ? video.name : 'video_${DateTime.now().millisecondsSinceEpoch}.mp4',
+        location: video.path,
+        description: 'Video recording captured during officer observation',
+        capturedAt: DateTime.now().toIso8601String(),
+        gps: currentGps,
+        capturedBy: widget.timelineDetails.officer.badgeNumber,
+        fileSize: sizeStr,
+        duration: '00:30',
+      );
+
+      if (mounted) {
+        setState(() {
+          _addedEvidenceList.add(item);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to record video: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addEvidenceFromDevice() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? file = await picker.pickMedia();
+      if (file == null) return;
+
+      // Fetch live device GPS coordinates for this option
+      final GpsLocation currentGps = await _getCurrentDeviceGps();
+
+      final newId = 'device_evidence_${DateTime.now().millisecondsSinceEpoch}';
+      final fileLength = await file.length();
+      final double mbSize = fileLength / (1024 * 1024);
+      final String sizeStr = fileLength > 0
+          ? (mbSize >= 1.0 ? '${mbSize.toStringAsFixed(1)} MB' : '${(fileLength / 1024).toStringAsFixed(0)} KB')
+          : '2.4 MB';
+
+      final ext = file.name.split('.').last.toLowerCase();
+      EvidenceType type = EvidenceType.photo;
+      if (['mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'].contains(ext)) {
+        type = EvidenceType.video;
+      } else if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
+        type = EvidenceType.audio;
+      } else if (['pdf', 'doc', 'docx', 'txt'].contains(ext)) {
+        type = EvidenceType.document;
+      }
+
+      final item = EvidenceItem(
+        id: newId,
+        type: type,
+        fileName: file.name.isNotEmpty ? file.name : 'evidence_${DateTime.now().millisecondsSinceEpoch}.$ext',
+        location: file.path,
+        description: 'Evidence selected from device storage',
+        capturedAt: DateTime.now().toIso8601String(),
+        gps: currentGps,
+        capturedBy: widget.timelineDetails.officer.badgeNumber,
+        fileSize: sizeStr,
+        duration: type == EvidenceType.video ? '00:30' : (type == EvidenceType.audio ? '01:30' : ''),
+      );
+
+      if (mounted) {
+        setState(() {
+          _addedEvidenceList.add(item);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to select file from device: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showAddEvidencePicker(AppLocalizations loc) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              loc.text('select_evidence_type'),
+              style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF2563EB),
+                child: Icon(Icons.camera_alt_rounded, color: Colors.white),
+              ),
+              title: Text(loc.text('click_picture')),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addPhotoEvidence();
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF9333EA),
+                child: Icon(Icons.videocam_rounded, color: Colors.white),
+              ),
+              title: Text(loc.text('record_video')),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addVideoEvidence();
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF0284C7),
+                child: Icon(Icons.perm_media_rounded, color: Colors.white),
+              ),
+              title: Text(loc.text('choose_from_device')),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addEvidenceFromDevice();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitObservation(AppLocalizations loc) async {
+    final transcript = _transcriptController.text.trim();
+    if (transcript.isEmpty && _addedEvidenceList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(loc.text('enter_observation_or_evidence')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final nowIso = DateTime.now().toIso8601String();
+      final evidenceIds = _addedEvidenceList.map((e) => e.id).toList();
+
+      TimelineDetails updatedDetails;
+      String messageKey;
+
+      if (widget.personType == 'victim' && widget.personId != null) {
+        final stmtId = 'stmt_${widget.personId.toString().replaceAll('vic_', 'v')}_${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(2, '0')}';
+        final newStatement = PersonStatement(
+          statementId: stmtId,
+          timestamp: nowIso,
+          transcript: transcript.isNotEmpty ? transcript : 'Victim statement recorded with evidence.',
+          evidenceIds: evidenceIds,
+          gps: widget.timelineDetails.incident.gps,
+        );
+        updatedDetails = widget.timelineDetails.withVictimStatement(
+          widget.personId!,
+          newStatement,
+          newEvidenceList: _addedEvidenceList,
+        );
+        messageKey = 'statement_added';
+      } else if (widget.personType == 'witness' && widget.personId != null) {
+        final stmtId = 'stmt_${widget.personId.toString().replaceAll('wit_', 'w')}_${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(2, '0')}';
+        final newStatement = PersonStatement(
+          statementId: stmtId,
+          timestamp: nowIso,
+          transcript: transcript.isNotEmpty ? transcript : 'Witness statement recorded with evidence.',
+          evidenceIds: evidenceIds,
+          gps: widget.timelineDetails.incident.gps,
+        );
+        updatedDetails = widget.timelineDetails.withWitnessStatement(
+          widget.personId!,
+          newStatement,
+          newEvidenceList: _addedEvidenceList,
+        );
+        messageKey = 'statement_added';
+      } else if (widget.personType == 'suspect' && widget.personId != null) {
+        final stmtId = 'stmt_${widget.personId.toString().replaceAll('sus_', 's')}_${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(2, '0')}';
+        final newStatement = PersonStatement(
+          statementId: stmtId,
+          timestamp: nowIso,
+          transcript: transcript.isNotEmpty ? transcript : 'Suspect statement recorded with evidence.',
+          evidenceIds: evidenceIds,
+          gps: widget.timelineDetails.incident.gps,
+        );
+        updatedDetails = widget.timelineDetails.withSuspectStatement(
+          widget.personId!,
+          newStatement,
+          newEvidenceList: _addedEvidenceList,
+        );
+        messageKey = 'statement_added';
+      } else {
+        final obsId = 'obs_${DateTime.now().millisecondsSinceEpoch}';
+        final newObservation = OfficerObservationItem(
+          id: obsId,
+          timestamp: nowIso,
+          gps: widget.timelineDetails.incident.gps,
+          transcript: transcript.isNotEmpty ? transcript : 'Officer observation recorded with evidence.',
+          evidenceIds: evidenceIds,
+        );
+        updatedDetails = widget.timelineDetails.withOfficerObservation(
+          newObservation,
+          newEvidenceList: _addedEvidenceList,
+        );
+        messageKey = 'observation_added';
+      }
+
+      final rootIncident = updatedDetails.incident.toRootIncident();
+
+      // Persist to Database 2 (Specific Timeline Details) & Database 1 (All Incidents Summary)
+      await widget.ref
+          .read(timelineMapNotifierProvider.notifier)
+          .saveTimelineDetails(widget.timelineDetails.incident.id, updatedDetails);
+      await widget.ref
+          .read(allIncidentsProvider.notifier)
+          .updateIncident(rootIncident);
+
+      // Invalidate providers for real-time UI refresh
+      widget.ref.invalidate(timelineDetailsProvider(widget.timelineDetails.incident.id));
+      widget.ref.invalidate(allIncidentsProvider);
+      widget.ref.invalidate(homeDataProvider);
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(loc.text(messageKey)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save statement: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
+
+    final accentColor = widget.personType == 'victim'
+        ? const Color(0xFF16A34A)
+        : (widget.personType == 'witness'
+            ? const Color(0xFFEA580C)
+            : const Color(0xFF2563EB));
+
+    final headerIcon = widget.personType == 'victim'
+        ? Icons.person_rounded
+        : (widget.personType == 'witness'
+            ? Icons.people_alt_rounded
+            : Icons.remove_red_eye_rounded);
+
+    final buttonLabel = (widget.personName != null && widget.personName!.isNotEmpty)
+        ? loc.text('add_statement')
+        : loc.text('add_observation_single');
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(headerIcon, color: accentColor, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        (widget.personName != null && widget.personName!.isNotEmpty)
+                            ? '${loc.text('statement_for')} ${widget.personName}'
+                            : loc.text('add_observation_single'),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 20),
+
+                Text(
+                  loc.text('officer_remarks_transcript'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _isListening
+                          ? Colors.red
+                          : (isDark ? Colors.white12 : AppColors.border),
+                      width: _isListening ? 2.0 : 1.0,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _transcriptController,
+                        maxLines: 4,
+                        decoration: InputDecoration(
+                          hintText: loc.text('enter_statement_hint'),
+                          hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withValues(alpha: 0.4),
+                          ),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              ChoiceChip(
+                                label: const Text('English'),
+                                selected: _selectedLanguage == 'English',
+                                onSelected: (sel) {
+                                  if (sel) setState(() => _selectedLanguage = 'English');
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              ChoiceChip(
+                                label: const Text('हिन्दी'),
+                                selected: _selectedLanguage == 'Hindi',
+                                onSelected: (sel) {
+                                  if (sel) setState(() => _selectedLanguage = 'Hindi');
+                                },
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              backgroundColor: _isListening
+                                  ? Colors.red
+                                  : accentColor.withValues(alpha: 0.12),
+                            ),
+                            icon: Icon(
+                              _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                              color: _isListening ? Colors.white : accentColor,
+                            ),
+                            onPressed: _toggleListening,
+                            tooltip: 'Voice Input',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${loc.text('evidence_attachments')} (${_addedEvidenceList.length})',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _showAddEvidencePicker(loc),
+                      icon: const Icon(Icons.add_a_photo_rounded, size: 16),
+                      label: Text(loc.text('add_evidence')),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (_addedEvidenceList.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        loc.text('no_evidence_attached'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 90,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _addedEvidenceList.length,
+                      itemBuilder: (context, index) {
+                        final item = _addedEvidenceList[index];
+                        IconData iconData;
+                        Color typeColor;
+
+                        switch (item.type) {
+                          case EvidenceType.video:
+                            iconData = Icons.videocam_rounded;
+                            typeColor = const Color(0xFF9333EA);
+                            break;
+                          case EvidenceType.audio:
+                            iconData = Icons.audiotrack_rounded;
+                            typeColor = const Color(0xFFEA580C);
+                            break;
+                          case EvidenceType.document:
+                            iconData = Icons.insert_drive_file_rounded;
+                            typeColor = const Color(0xFF16A34A);
+                            break;
+                          case EvidenceType.photo:
+                            iconData = Icons.camera_alt_rounded;
+                            typeColor = const Color(0xFF2563EB);
+                            break;
+                        }
+
+                        return Container(
+                          width: 110,
+                          margin: const EdgeInsets.only(right: 10),
+                          child: Stack(
+                            children: [
+                              InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  if (item.location != null && item.location!.isNotEmpty) {
+                                    if (item.type == EvidenceType.audio) {
+                                      FullScreenAudioPlayer.open(
+                                        context,
+                                        audioPath: item.location!,
+                                        title: item.fileName,
+                                        subtitle: 'Attached Audio Recording',
+                                        caption: 'Size: ${item.fileSize}',
+                                      );
+                                    } else if (item.type == EvidenceType.video) {
+                                      FullScreenVideoPlayer.open(
+                                        context,
+                                        videoPath: item.location!,
+                                        title: item.fileName,
+                                        subtitle: 'Attached Video Evidence',
+                                        caption: 'Size: ${item.fileSize}',
+                                      );
+                                    } else if (item.type == EvidenceType.photo) {
+                                      FullScreenImageViewer.openSingle(
+                                        context,
+                                        imagePath: item.location!,
+                                        title: item.fileName,
+                                        subtitle: 'Attached Photo Evidence',
+                                        caption: 'Size: ${item.fileSize}',
+                                      );
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  width: 110,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: typeColor,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        iconData,
+                                        color: typeColor,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        item.fileName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        item.fileSize,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: colorScheme.onSurface.withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _addedEvidenceList.removeAt(index);
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isSaving ? null : () => _submitObservation(loc),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            buttonLabel,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+}
+
 
 
 

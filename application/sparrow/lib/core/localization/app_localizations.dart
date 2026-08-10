@@ -78,20 +78,20 @@ class AppLocalizations {
       AppLanguage.hindi: 'त्वरित कार्रवाई',
     },
     'officer_observation': {
-      AppLanguage.english: 'Officer\nObservation',
-      AppLanguage.hindi: 'अधिकारी\nअवलोकन',
+      AppLanguage.english: 'Add Officer\nObservation',
+      AppLanguage.hindi: 'अधिकारी अवलोकन\nजोड़ें',
     },
     'victim_statement': {
-      AppLanguage.english: 'Victim\nStatement',
-      AppLanguage.hindi: 'पीड़ित का\nबयान',
+      AppLanguage.english: 'Add Victim\nStatement',
+      AppLanguage.hindi: 'पीड़ित का बयान\nजोड़ें',
     },
     'witness_statement': {
-      AppLanguage.english: 'Witness\nStatement',
-      AppLanguage.hindi: 'गवाह का\nबयान',
+      AppLanguage.english: 'Add Witness\nStatement',
+      AppLanguage.hindi: 'गवाह का बयान\nजोड़ें',
     },
     'suspect_statement': {
-      AppLanguage.english: 'Suspect\nStatement',
-      AppLanguage.hindi: 'संदिग्ध का\nबयान',
+      AppLanguage.english: 'Add Suspect\nStatement',
+      AppLanguage.hindi: 'संदिग्ध का बयान\nजोड़ें',
     },
     'recent_incidents': {
       AppLanguage.english: 'Recent Incidents',
@@ -480,6 +480,11 @@ class AppLocalizations {
       AppLanguage.english: 'AUTO FETCHED',
       AppLanguage.hindi: 'ऑटो प्राप्त',
     },
+    'press_back_again_to_exit': {
+      AppLanguage.english: 'Press back again to exit',
+      AppLanguage.hindi: 'ऐप से बाहर निकलने के लिए फिर से वापस दबाएं',
+    },
+
     'police_station': {
       AppLanguage.english: 'Police Station',
       AppLanguage.hindi: 'पुलिस स्टेशन',
@@ -561,6 +566,76 @@ class AppLocalizations {
       AppLanguage.english: 'New Incident',
       AppLanguage.hindi: 'नया मामला',
     },
+    'report_generation': {
+      AppLanguage.english: 'Report Gen',
+      AppLanguage.hindi: 'रिपोर्ट निर्माण',
+    },
+    'report_generator': {
+      AppLanguage.english: 'AI Report Generator',
+      AppLanguage.hindi: 'एआई रिपोर्ट जनरेटर',
+    },
+    'generate_report': {
+      AppLanguage.english: 'Generate AI Report',
+      AppLanguage.hindi: 'एआई रिपोर्ट जनरेट करें',
+    },
+    'select_incident_file': {
+      AppLanguage.english: 'Select Incident File',
+      AppLanguage.hindi: 'मामला फ़ाइल चुनें',
+    },
+    'report_type': {
+      AppLanguage.english: 'Report Type',
+      AppLanguage.hindi: 'रिपोर्ट का प्रकार',
+    },
+    'ai_case_report_generator': {
+      AppLanguage.english: 'AI Case Report Generator',
+      AppLanguage.hindi: 'एआई केस रिपोर्ट जनरेटर',
+    },
+    'automated_case_summaries': {
+      AppLanguage.english: 'Automated Case Summaries & Reports',
+      AppLanguage.hindi: 'स्वचालित मामला सारांश और रिपोर्ट',
+    },
+    'select_completed_case_banner': {
+      AppLanguage.english:
+          'Select a completed case to view details, inspect raw JSON, and generate automated reports.',
+      AppLanguage.hindi:
+          'विवरण देखने, कच्चा JSON जांचने और स्वचालित रिपोर्ट उत्पन्न करने के लिए एक पूर्ण मामला चुनें।',
+    },
+    'step_select_completed_case': {
+      AppLanguage.english: '1. Select Completed Case',
+      AppLanguage.hindi: '1. पूर्ण मामला चुनें',
+    },
+    'select_completed_case_hint': {
+      AppLanguage.english: 'Select a completed case',
+      AppLanguage.hindi: 'एक पूर्ण मामला चुनें',
+    },
+    'step_select_report_language': {
+      AppLanguage.english: '2. Select Report Language',
+      AppLanguage.hindi: '2. रिपोर्ट की भाषा चुनें',
+    },
+    'view_case_details_json': {
+      AppLanguage.english: 'View Case Details in JSON View',
+      AppLanguage.hindi: 'JSON व्यू में मामले का विवरण देखें',
+    },
+    'generate_report_btn': {
+      AppLanguage.english: 'Generate Report',
+      AppLanguage.hindi: 'रिपोर्ट जनरेट करें',
+    },
+    'report_coming_soon': {
+      AppLanguage.english: 'Report generation is coming soon!',
+      AppLanguage.hindi: 'रिपोर्ट निर्माण सुविधा शीघ्र ही आ रही है!',
+    },
+    'incident_specific_db_json': {
+      AppLanguage.english: 'Incident Specific Database JSON',
+      AppLanguage.hindi: 'मामला विशिष्ट डेटाबेस JSON',
+    },
+    'copy_json': {
+      AppLanguage.english: 'Copy JSON',
+      AppLanguage.hindi: 'JSON कॉपी करें',
+    },
+    'json_copied_toast': {
+      AppLanguage.english: 'Incident specific JSON copied to clipboard!',
+      AppLanguage.hindi: 'मामला विशिष्ट JSON क्लिपबोर्ड पर कॉपी हो गया!',
+    },
     'search': {
       AppLanguage.english: 'Search',
       AppLanguage.hindi: 'खोजें',
@@ -595,7 +670,360 @@ class AppLocalizations {
       AppLanguage.english: 'Switched to English',
       AppLanguage.hindi: 'हिंदी भाषा में बदला गया',
     },
+
+    // Add Observation Sheet
+    'add_observation_single': {
+      AppLanguage.english: 'Add Observation',
+      AppLanguage.hindi: 'अवलोकन जोड़ें',
+    },
+    'officer_remarks_transcript': {
+      AppLanguage.english: 'Officer Remarks / Transcript *',
+      AppLanguage.hindi: 'अधिकारी की टिप्पणी / प्रतिलेख *',
+    },
+    'enter_observation_hint': {
+      AppLanguage.english: 'Enter observation transcript or tap microphone to dictate...',
+      AppLanguage.hindi: 'अवलोकन विवरण दर्ज करें या बोलने के लिए माइक टैप करें...',
+    },
+    'evidence_attachments': {
+      AppLanguage.english: 'Evidence Attachments',
+      AppLanguage.hindi: 'साक्ष्य संलग्नक',
+    },
+    'add_evidence': {
+      AppLanguage.english: 'Add Evidence',
+      AppLanguage.hindi: 'साक्ष्य जोड़ें',
+    },
+    'no_evidence_attached': {
+      AppLanguage.english: 'No evidence attached yet. Click "Add Evidence" to attach photos or video clips.',
+      AppLanguage.hindi: 'अभी तक कोई साक्ष्य संलग्न नहीं है। फोटो या वीडियो जोड़ने के लिए "साक्ष्य जोड़ें" पर क्लिक करें।',
+    },
+    'select_evidence_type': {
+      AppLanguage.english: 'Select Evidence Type',
+      AppLanguage.hindi: 'साक्ष्य का प्रकार चुनें',
+    },
+    'capture_photo': {
+      AppLanguage.english: 'Capture Photo',
+      AppLanguage.hindi: 'फोटो खींचें',
+    },
+    'take_photo_camera': {
+      AppLanguage.english: 'Take a photo using camera',
+      AppLanguage.hindi: 'कैमरे से फोटो लें',
+    },
+    'record_video': {
+      AppLanguage.english: 'Record Video',
+      AppLanguage.hindi: 'वीडियो रिकॉर्ड करें',
+    },
+    'record_video_clip': {
+      AppLanguage.english: 'Record a video clip',
+      AppLanguage.hindi: 'एक वीडियो क्लिप रिकॉर्ड करें',
+    },
+    'click_picture': {
+      AppLanguage.english: 'Click Picture',
+      AppLanguage.hindi: 'फोटो खींचें',
+    },
+    'choose_from_device': {
+      AppLanguage.english: 'Choose from device (picture, video, audio)',
+      AppLanguage.hindi: 'डिवाइस से चुनें (चित्र, वीडियो, ऑडियो)',
+    },
+    'enter_observation_or_evidence': {
+      AppLanguage.english: 'Please enter an observation transcript or add evidence.',
+      AppLanguage.hindi: 'कृपया एक अवलोकन विवरण दर्ज करें या साक्ष्य जोड़ें।',
+    },
+    'observation_added': {
+      AppLanguage.english: 'Observation added successfully!',
+      AppLanguage.hindi: 'अवलोकन सफलतापूर्वक जोड़ा गया!',
+    },
+    'add_victim_btn': {
+      AppLanguage.english: 'Add Victim',
+      AppLanguage.hindi: 'पीड़ित जोड़ें',
+    },
+    'add_witness_btn': {
+      AppLanguage.english: 'Add Witness',
+      AppLanguage.hindi: 'गवाह जोड़ें',
+    },
+    'no_victims_recorded': {
+      AppLanguage.english: 'No victims recorded',
+      AppLanguage.hindi: 'कोई पीड़ित दर्ज नहीं है',
+    },
+    'no_witnesses_recorded': {
+      AppLanguage.english: 'No witnesses recorded',
+      AppLanguage.hindi: 'कोई गवाह दर्ज नहीं है',
+    },
+    'add_statement': {
+      AppLanguage.english: 'Add Statement',
+      AppLanguage.hindi: 'बयान दर्ज करें',
+    },
+    'statement_for': {
+      AppLanguage.english: 'Add Statement for',
+      AppLanguage.hindi: 'के लिए बयान दर्ज करें',
+    },
+    'name': {
+      AppLanguage.english: 'Name',
+      AppLanguage.hindi: 'नाम',
+    },
+    'age': {
+      AppLanguage.english: 'Age',
+      AppLanguage.hindi: 'आयु',
+    },
+    'gender': {
+      AppLanguage.english: 'Gender',
+      AppLanguage.hindi: 'लिंग',
+    },
+    'phone': {
+      AppLanguage.english: 'Phone Number',
+      AppLanguage.hindi: 'फ़ोन नंबर',
+    },
+    'address': {
+      AppLanguage.english: 'Address',
+      AppLanguage.hindi: 'पता',
+    },
+    'role': {
+      AppLanguage.english: 'Role',
+      AppLanguage.hindi: 'भूमिका',
+    },
+    'occupation': {
+      AppLanguage.english: 'Occupation',
+      AppLanguage.hindi: 'व्यवसाय',
+    },
+    'male': {
+      AppLanguage.english: 'Male',
+      AppLanguage.hindi: 'पुरुष',
+    },
+    'female': {
+      AppLanguage.english: 'Female',
+      AppLanguage.hindi: 'महिला',
+    },
+    'other_gender': {
+      AppLanguage.english: 'Other',
+      AppLanguage.hindi: 'अन्य',
+    },
+    'name_required': {
+      AppLanguage.english: 'Name is required',
+      AppLanguage.hindi: 'नाम आवश्यक है',
+    },
+    'age_required': {
+      AppLanguage.english: 'Age is required',
+      AppLanguage.hindi: 'आयु आवश्यक है',
+    },
+    'gender_required': {
+      AppLanguage.english: 'Gender is required',
+      AppLanguage.hindi: 'लिंग चुनना आवश्यक है',
+    },
+    'victim_added': {
+      AppLanguage.english: 'Victim added successfully!',
+      AppLanguage.hindi: 'पीड़ित सफलतापूर्वक जोड़ा गया!',
+    },
+    'witness_added': {
+      AppLanguage.english: 'Witness added successfully!',
+      AppLanguage.hindi: 'गवाह सफलतापूर्वक जोड़ा गया!',
+    },
+    'statement_added': {
+      AppLanguage.english: 'Statement recorded successfully!',
+      AppLanguage.hindi: 'बयान सफलतापूर्वक दर्ज किया गया!',
+    },
+    'add_suspect_btn': {
+      AppLanguage.english: 'Add Suspect',
+      AppLanguage.hindi: 'संदिग्ध जोड़ें',
+    },
+    'no_suspects_recorded': {
+      AppLanguage.english: 'No suspects recorded',
+      AppLanguage.hindi: 'कोई संदिग्ध दर्ज नहीं है',
+    },
+    'suspect_added': {
+      AppLanguage.english: 'Suspect added successfully!',
+      AppLanguage.hindi: 'संदिग्ध सफलतापूर्वक जोड़ा गया!',
+    },
+    'suspect_status': {
+      AppLanguage.english: 'Status',
+      AppLanguage.hindi: 'स्थिति',
+    },
+    'no_officer_observations_logged': {
+      AppLanguage.english: 'No officer observations logged.',
+      AppLanguage.hindi: 'कोई अधिकारी अवलोकन दर्ज नहीं किया गया।',
+    },
+    'person_name_hint': {
+      AppLanguage.english: 'e.g. Arjun Mehta',
+      AppLanguage.hindi: 'जैसे: अर्जुन मेहता',
+    },
+    'suspect_name_hint': {
+      AppLanguage.english: 'e.g. Vikas Verma',
+      AppLanguage.hindi: 'जैसे: विकास वर्मा',
+    },
+    'age_hint': {
+      AppLanguage.english: 'e.g. 34',
+      AppLanguage.hindi: 'जैसे: 34',
+    },
+    'phone_hint': {
+      AppLanguage.english: '+91-9812345678',
+      AppLanguage.hindi: '+91-9812345678',
+    },
+    'address_hint': {
+      AppLanguage.english: 'e.g. A-204, Sector 62, Noida',
+      AppLanguage.hindi: 'जैसे: ए-204, सेक्टर 62, नोएडा',
+    },
+    'witness_occupation_hint': {
+      AppLanguage.english: 'e.g. Shop Owner',
+      AppLanguage.hindi: 'जैसे: दुकान मालिक',
+    },
+    'victim_role_hint': {
+      AppLanguage.english: 'e.g. Owner',
+      AppLanguage.hindi: 'जैसे: मालिक',
+    },
+    'suspect_status_hint': {
+      AppLanguage.english: 'e.g. Detained, At Large, Arrested',
+      AppLanguage.hindi: 'जैसे: हिरासत में, फरार, गिरफ्तार',
+    },
+    'enter_statement_hint': {
+      AppLanguage.english: 'Enter statement transcript or tap microphone to dictate...',
+      AppLanguage.hindi: 'बयान ट्रांसक्रिप्ट दर्ज करें या बोलने के लिए माइक टैप करें...',
+    },
+    'yrs': {
+      AppLanguage.english: 'Yrs',
+      AppLanguage.hindi: 'वर्ष',
+    },
+    'valid_age': {
+      AppLanguage.english: 'Valid age',
+      AppLanguage.hindi: 'मान्य आयु दर्ज करें',
+    },
+    'edit_statement': {
+      AppLanguage.english: 'Edit Statement',
+      AppLanguage.hindi: 'बयान संपादित करें',
+    },
+    'edit_observation': {
+      AppLanguage.english: 'Edit Observation',
+      AppLanguage.hindi: 'अवलोकन संपादित करें',
+    },
+    'delete_statement': {
+      AppLanguage.english: 'Delete Statement',
+      AppLanguage.hindi: 'बयान हटाएं',
+    },
+    'delete_observation': {
+      AppLanguage.english: 'Delete Observation',
+      AppLanguage.hindi: 'अवलोकन हटाएं',
+    },
+    'delete_statement_confirm': {
+      AppLanguage.english: 'Are you sure you want to delete this statement? This action cannot be undone.',
+      AppLanguage.hindi: 'क्या आप निश्चित रूप से इस बयान को हटाना चाहते हैं? यह कार्रवाई पूर्ववत नहीं की जा सकती।',
+    },
+    'delete_observation_confirm': {
+      AppLanguage.english: 'Are you sure you want to delete this observation? This action cannot be undone.',
+      AppLanguage.hindi: 'क्या आप निश्चित रूप से इस अवलोकन को हटाना चाहते हैं? यह कार्रवाई पूर्ववत नहीं की जा सकती।',
+    },
+    'statement_updated': {
+      AppLanguage.english: 'Statement updated successfully!',
+      AppLanguage.hindi: 'बयान सफलतापूर्वक अद्यतन किया गया!',
+    },
+    'observation_updated': {
+      AppLanguage.english: 'Observation updated successfully!',
+      AppLanguage.hindi: 'अवलोकन सफलतापूर्वक अद्यतन किया गया!',
+    },
+    'statement_deleted': {
+      AppLanguage.english: 'Statement deleted successfully!',
+      AppLanguage.hindi: 'बयान सफलतापूर्वक हटा दिया गया!',
+    },
+    'observation_deleted': {
+      AppLanguage.english: 'Observation deleted successfully!',
+      AppLanguage.hindi: 'अवलोकन सफलतापूर्वक हटा दिया गया!',
+    },
+    'transcript_label': {
+      AppLanguage.english: 'Transcript',
+      AppLanguage.hindi: 'विवरण / ट्रांसक्रिप्ट',
+    },
+    'recorded_statements': {
+      AppLanguage.english: 'Recorded Statements',
+      AppLanguage.hindi: 'दर्ज किए गए बयान',
+    },
+    'no_recorded_statements': {
+      AppLanguage.english: 'No recorded statements.',
+      AppLanguage.hindi: 'कोई दर्ज बयान नहीं है।',
+    },
+
+    // Officer Profile Setup & Edit Modal Translations
+    'officer_identification': {
+      AppLanguage.english: 'OFFICER IDENTIFICATION',
+      AppLanguage.hindi: 'अधिकारी पहचान',
+    },
+    'setup_officer_profile': {
+      AppLanguage.english: 'Setup Officer Profile',
+      AppLanguage.hindi: 'अधिकारी प्रोफ़ाइल सेट करें',
+    },
+    'edit_officer_profile': {
+      AppLanguage.english: 'Edit Officer Profile',
+      AppLanguage.hindi: 'अधिकारी प्रोफ़ाइल संपादित करें',
+    },
+    'mandatory_profile_desc': {
+      AppLanguage.english: 'Please complete all required fields to proceed into the application.',
+      AppLanguage.hindi: 'आवेदन में आगे बढ़ने के लिए कृपया सभी आवश्यक फ़ील्ड भरें।',
+    },
+    'edit_profile_desc': {
+      AppLanguage.english: 'Update your official profile details.',
+      AppLanguage.hindi: 'अपनी आधिकारिक प्रोफ़ाइल जानकारी अद्यतन करें।',
+    },
+    'full_name_required': {
+      AppLanguage.english: 'Full Name *',
+      AppLanguage.hindi: 'पूरा नाम *',
+    },
+    'designation_required': {
+      AppLanguage.english: 'Designation *',
+      AppLanguage.hindi: 'पद / पदनाम *',
+    },
+    'police_station_required': {
+      AppLanguage.english: 'Police Station *',
+      AppLanguage.hindi: 'थाना / पुलिस स्टेशन *',
+    },
+    'district_required': {
+      AppLanguage.english: 'District *',
+      AppLanguage.hindi: 'ज़िला *',
+    },
+    'state_required': {
+      AppLanguage.english: 'State *',
+      AppLanguage.hindi: 'राज्य *',
+    },
+    'badge_number_required': {
+      AppLanguage.english: 'Badge / Service Number *',
+      AppLanguage.hindi: 'बैज / सेवा संख्या *',
+    },
+    'contact_phone_required': {
+      AppLanguage.english: 'Contact Phone *',
+      AppLanguage.hindi: 'संपर्क फोन *',
+    },
+    'save_and_continue': {
+      AppLanguage.english: 'Save & Continue',
+      AppLanguage.hindi: 'सहेजें और आगे बढ़ें',
+    },
+    'field_required_error': {
+      AppLanguage.english: 'This field is required',
+      AppLanguage.hindi: 'यह फ़ील्ड आवश्यक है',
+    },
+    'hint_full_name': {
+      AppLanguage.english: 'e.g. Rahul Sharma',
+      AppLanguage.hindi: 'जैसे: राहुल शर्मा',
+    },
+    'hint_designation': {
+      AppLanguage.english: 'e.g. Sub Inspector',
+      AppLanguage.hindi: 'जैसे: उप निरीक्षक (सब इंस्पेक्टर)',
+    },
+    'hint_police_station': {
+      AppLanguage.english: 'e.g. Sector 18, Noida',
+      AppLanguage.hindi: 'जैसे: सेक्टर 18, नोएडा',
+    },
+    'hint_district': {
+      AppLanguage.english: 'e.g. Gautam Budh Nagar',
+      AppLanguage.hindi: 'जैसे: गौतम बुद्ध नगर',
+    },
+    'hint_state': {
+      AppLanguage.english: 'e.g. Uttar Pradesh',
+      AppLanguage.hindi: 'जैसे: उत्तर प्रदेश',
+    },
+    'hint_badge_number': {
+      AppLanguage.english: 'e.g. UP-GBN-8821',
+      AppLanguage.hindi: 'जैसे: UP-GBN-8821',
+    },
+    'hint_phone': {
+      AppLanguage.english: 'e.g. +91-9876543210',
+      AppLanguage.hindi: 'जैसे: +91-9876543210',
+    },
   };
+
 
   String text(String key) {
     final map = _translations[key];

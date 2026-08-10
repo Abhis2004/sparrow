@@ -52,8 +52,33 @@ class IsarService {
   /// Inserts or updates a root incident in Isar database
   Future<void> saveIncident(Incident incident) async {
     final isar = await db;
+    final existing = await isar.isarIncidents.filter().idEqualTo(incident.id).findFirst();
+    final nowIso = DateTime.now().toIso8601String();
+    final updatedIncident = Incident(
+      id: incident.id,
+      incidentName: incident.incidentName,
+      location: incident.location,
+      startedAt: incident.startedAt,
+      startedDate: incident.startedDate,
+      completedAt: incident.completedAt,
+      completedDate: incident.completedDate,
+      lastInteracted: incident.lastInteracted ?? nowIso,
+      status: incident.status,
+      category: incident.category,
+      rawStatus: incident.rawStatus,
+      rawCategory: incident.rawCategory,
+      observationCount: incident.observationCount,
+      victimCount: incident.victimCount,
+      witnessCount: incident.witnessCount,
+      suspectCount: incident.suspectCount,
+    );
+
+    final isarIncident = updatedIncident.toIsar();
+    if (existing != null) {
+      isarIncident.isarAutoId = existing.isarAutoId;
+    }
     await isar.writeTxn(() async {
-      await isar.isarIncidents.put(incident.toIsar());
+      await isar.isarIncidents.put(isarIncident);
     });
   }
 
@@ -69,17 +94,43 @@ class IsarService {
     return null;
   }
 
-  /// Inserts or updates detailed timeline in Isar database
+  /// Inserts or updates detailed timeline in Isar database and updates last_interacted in Root Incidents List DB
   Future<void> saveTimelineDetails(String incidentId, TimelineDetails details) async {
     final isar = await db;
-    final isarDetail = details.toIsar(incidentId);
+    final nowIso = DateTime.now().toIso8601String();
+
+    // Automatically update last_interacted timestamp on overview and root incident
+    final updatedOverview = details.incident.copyWith(lastInteracted: nowIso);
+    final updatedDetails = TimelineDetails(
+      incident: updatedOverview,
+      officer: details.officer,
+      victims: details.victims,
+      witnesses: details.witnesses,
+      suspects: details.suspects,
+      officerObservations: details.officerObservations,
+      evidence: details.evidence,
+      timeline: details.timeline,
+    );
+
+    final existingDetails =
+        await isar.isarTimelineDetails.filter().incidentIdEqualTo(incidentId).findFirst();
+    final isarDetail = updatedDetails.toIsar(incidentId);
+    if (existingDetails != null) {
+      isarDetail.isarAutoId = existingDetails.isarAutoId;
+    }
 
     await isar.writeTxn(() async {
       await isar.isarTimelineDetails.put(isarDetail);
     });
 
-    // Also update root incident counts/status in Isar
-    final isarIncident = details.incident.toRootIncident().toIsar();
+    // Also update root incident summary & last_interacted field in Root Incidents List Database (isarIncidents)
+    final rootIncident = updatedOverview.toRootIncident();
+    final existingIncident =
+        await isar.isarIncidents.filter().idEqualTo(incidentId).findFirst();
+    final isarIncident = rootIncident.toIsar();
+    if (existingIncident != null) {
+      isarIncident.isarAutoId = existingIncident.isarAutoId;
+    }
     await isar.writeTxn(() async {
       await isar.isarIncidents.put(isarIncident);
     });
@@ -94,7 +145,6 @@ class IsarService {
     });
   }
 }
-
 
 // Model Mapper Extensions
 extension IsarIncidentMapper on IsarIncident {
@@ -131,6 +181,7 @@ extension IsarIncidentMapper on IsarIncident {
       startedDate: startedDate,
       completedAt: completedAt,
       completedDate: completedDate,
+      lastInteracted: lastInteracted,
       status: statusEnum,
       category: catEnum,
       rawStatus: status,
@@ -153,6 +204,7 @@ extension IncidentToIsar on Incident {
       ..startedDate = startedDate
       ..completedAt = completedAt
       ..completedDate = completedDate
+      ..lastInteracted = lastInteracted
       ..status = rawStatus.isNotEmpty ? rawStatus : status.name
       ..category = rawCategory.isNotEmpty ? rawCategory : category.name
       ..observationCount = observationCount
@@ -211,6 +263,7 @@ extension IncidentOverviewToRoot on IncidentOverview {
       startedDate: startedDate,
       completedAt: completedAt,
       completedDate: completedDate,
+      lastInteracted: lastInteracted,
       status: statusEnum,
       category: catEnum,
       rawStatus: rawStatus,

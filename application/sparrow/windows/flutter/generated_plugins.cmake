@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
+  file_selector_windows
   geolocator_windows
   isar_community_flutter_libs
   speech_to_text_windows

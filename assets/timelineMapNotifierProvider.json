@@ -1,0 +1,288 @@
+{
+  "incident": {
+    "id": "inc_6295488",
+    "incident_name": "Bike Theft Near Market",
+    "location": "Sector 18, Noida",
+    "gps": { "latitude": 28.5707, "longitude": 77.3219 },
+    "started_at": "03:15 PM",
+    "started_date": "09 Aug 2026",
+    "completed_at": "",
+    "completed_date": "",
+    "last_interacted": "2026-08-09T15:50:00.000",
+    "status": "active",
+    "category": "Theft",
+    "weather": "Partly cloudy, 31°C",
+    "station": "Sector 18, Noida",
+    "district": "Gautam Budh Nagar",
+    "state": "Uttar Pradesh",
+    "summary": "A bike was reported stolen from the market area near Gate 3.",
+    "observation_count": 3,
+    "victim_count": 1,
+    "witness_count": 1,
+    "suspect_count": 1
+  },
+
+  "officer": {
+    "badge_number": "UP-GBN-8821",
+    "name": "Rahul Sharma",
+    "designation": "Sub Inspector",
+    "station": "Sector 18, Noida",
+    "phone": "+91-9876543210"
+  },
+
+  "officerObservations": [
+    {
+      "id": "obs_001",
+      "timestamp": "2026-08-09T15:20:00.000",
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 },
+      "transcript": "Tyre marks found near Gate 3. CCTV footage requested from security.",
+      "evidence_ids": ["ev_photo_001"]
+    },
+    {
+      "id": "obs_002",
+      "timestamp": "2026-08-09T15:28:00.000",
+      "gps": { "latitude": 28.5712, "longitude": 77.3225 },
+      "transcript": "Eyewitness spotted suspect running towards north exit.",
+      "evidence_ids": ["ev_video_001"]
+    },
+    {
+      "id": "obs_003",
+      "timestamp": "2026-08-09T15:35:00.000",
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 },
+      "transcript": "Area cordoned off. Forensics team notified.",
+      "evidence_ids": []
+    }
+  ],
+
+  "victims": [
+    {
+      "id": "vic_001",
+      "name": "Arjun Mehta",
+      "age": 34,
+      "gender": "Male",
+      "phone": "+91-9812345678",
+      "address": "A-204, Sector 62, Noida",
+      "role": "Owner",
+      "statements": [
+        {
+          "statement_id": "stmt_v001_01",
+          "timestamp": "2026-08-09T15:30:00.000",
+          "transcript": "I parked my Honda Activa at 2:00 PM. When I returned at 3:00 PM it was gone.",
+          "evidence_ids": ["ev_audio_001"],
+          "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+        },
+        {
+          "statement_id": "stmt_v001_02",
+          "timestamp": "2026-08-09T15:33:00.000",
+          "transcript": "I did not notice anyone suspicious near my bike before parking.",
+          "evidence_ids": [],
+          "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+        }
+      ]
+    }
+  ],
+
+  "witnesses": [
+    {
+      "id": "wit_001",
+      "name": "Sunita Rawat",
+      "age": 28,
+      "gender": "Female",
+      "phone": "+91-9934567890",
+      "address": "B-11, Sector 18, Noida",
+      "occupation": "Shop Owner",
+      "statements": [
+        {
+          "statement_id": "stmt_w001_01",
+          "timestamp": "2026-08-09T15:40:00.000",
+          "transcript": "A young man in blue jacket was seen near the bike for about 5 minutes before riding away.",
+          "evidence_ids": ["ev_photo_002"],
+          "gps": { "latitude": 28.5710, "longitude": 77.3220 }
+        },
+        {
+          "statement_id": "stmt_w001_02",
+          "timestamp": "2026-08-09T15:43:00.000",
+          "transcript": "He appeared to be using some tool on the lock. I thought it was his own bike.",
+          "evidence_ids": [],
+          "gps": { "latitude": 28.5710, "longitude": 77.3220 }
+        }
+      ]
+    }
+  ],
+
+  "suspects": [
+    {
+      "id": "sus_001",
+      "name": "Vikas Verma",
+      "age": 25,
+      "gender": "Male",
+      "address": "Village Nithari, Sector 31, Noida",
+      "status": "Detained",
+      "statements": [
+        {
+          "statement_id": "stmt_s001_01",
+          "timestamp": "2026-08-09T15:48:00.000",
+          "transcript": "Audio confession recorded during preliminary interrogation.",
+          "evidence_ids": ["ev_audio_002"],
+          "gps": { "latitude": 28.5715, "longitude": 77.3230 }
+        },
+        {
+          "statement_id": "stmt_s001_02",
+          "timestamp": "2026-08-09T15:50:00.000",
+          "transcript": "Suspect admitted to selling stolen vehicle keys to an associate.",
+          "evidence_ids": [],
+          "gps": { "latitude": 28.5715, "longitude": 77.3230 }
+        }
+      ]
+    }
+  ],
+
+  "evidence": [
+    {
+      "id": "ev_photo_001",
+      "type": "photo",
+      "file_name": "tyre_marks_gate3.jpg",
+      "location": "/storage/emulated/0/DCIM/sparrow/tyre_marks_gate3.jpg",
+      "captured_at": "2026-08-09T15:20:00.000",
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 },
+      "captured_by": "UP-GBN-8821",
+      "file_size": "2.4 MB"
+    },
+    {
+      "id": "ev_video_001",
+      "type": "video",
+      "file_name": "north_exit_footage.mp4",
+      "location": "/storage/emulated/0/DCIM/sparrow/north_exit_footage.mp4",
+      "captured_at": "2026-08-09T15:28:00.000",
+      "gps": { "latitude": 28.5712, "longitude": 77.3225 },
+      "captured_by": "UP-GBN-8821",
+      "file_size": "18.7 MB",
+      "duration": "00:30"
+    },
+    {
+      "id": "ev_audio_001",
+      "type": "audio",
+      "file_name": "victim_statement_arjun.m4a",
+      "location": "/storage/emulated/0/Music/sparrow/victim_statement_arjun.m4a",
+      "captured_at": "2026-08-09T15:30:00.000",
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 },
+      "captured_by": "UP-GBN-8821",
+      "file_size": "1.2 MB",
+      "duration": "01:32"
+    },
+    {
+      "id": "ev_photo_002",
+      "type": "photo",
+      "file_name": "witness_photo_sunita.jpg",
+      "location": "/storage/emulated/0/DCIM/sparrow/witness_photo_sunita.jpg",
+      "captured_at": "2026-08-09T15:40:00.000",
+      "gps": { "latitude": 28.5710, "longitude": 77.3220 },
+      "captured_by": "UP-GBN-8821",
+      "file_size": "3.1 MB"
+    },
+    {
+      "id": "ev_audio_002",
+      "type": "audio",
+      "file_name": "suspect_interrogation_vikas.m4a",
+      "location": "/storage/emulated/0/Music/sparrow/suspect_interrogation_vikas.m4a",
+      "captured_at": "2026-08-09T15:48:00.000",
+      "gps": { "latitude": 28.5715, "longitude": 77.3230 },
+      "captured_by": "UP-GBN-8821",
+      "file_size": "2.8 MB",
+      "duration": "02:15"
+    }
+  ],
+
+  "timeline": [
+    {
+      "id": "tl_1723192200000",
+      "timestamp": "2026-08-09T15:15:00.000",
+      "eventType": "case_brief",
+      "personId": "UP-GBN-8821",
+      "referenceId": "",
+      "evidenceIds": [],
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+    },
+    {
+      "id": "tl_1723192200100",
+      "timestamp": "2026-08-09T15:20:00.000",
+      "eventType": "officer_observation",
+      "personId": "UP-GBN-8821",
+      "referenceId": "obs_001",
+      "evidenceIds": ["ev_photo_001"],
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+    },
+    {
+      "id": "tl_1723192200200",
+      "timestamp": "2026-08-09T15:28:00.000",
+      "eventType": "officer_observation",
+      "personId": "UP-GBN-8821",
+      "referenceId": "obs_002",
+      "evidenceIds": ["ev_video_001"],
+      "gps": { "latitude": 28.5712, "longitude": 77.3225 }
+    },
+    {
+      "id": "tl_1723192200300",
+      "timestamp": "2026-08-09T15:30:00.000",
+      "eventType": "victim_statement",
+      "personId": "vic_001",
+      "referenceId": "stmt_v001_01",
+      "evidenceIds": ["ev_audio_001"],
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+    },
+    {
+      "id": "tl_1723192200400",
+      "timestamp": "2026-08-09T15:33:00.000",
+      "eventType": "victim_statement",
+      "personId": "vic_001",
+      "referenceId": "stmt_v001_02",
+      "evidenceIds": [],
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+    },
+    {
+      "id": "tl_1723192200500",
+      "timestamp": "2026-08-09T15:35:00.000",
+      "eventType": "officer_observation",
+      "personId": "UP-GBN-8821",
+      "referenceId": "obs_003",
+      "evidenceIds": [],
+      "gps": { "latitude": 28.5707, "longitude": 77.3219 }
+    },
+    {
+      "id": "tl_1723192200600",
+      "timestamp": "2026-08-09T15:40:00.000",
+      "eventType": "witness_statement",
+      "personId": "wit_001",
+      "referenceId": "stmt_w001_01",
+      "evidenceIds": ["ev_photo_002"],
+      "gps": { "latitude": 28.5710, "longitude": 77.3220 }
+    },
+    {
+      "id": "tl_1723192200700",
+      "timestamp": "2026-08-09T15:43:00.000",
+      "eventType": "witness_statement",
+      "personId": "wit_001",
+      "referenceId": "stmt_w001_02",
+      "evidenceIds": [],
+      "gps": { "latitude": 28.5710, "longitude": 77.3220 }
+    },
+    {
+      "id": "tl_1723192200800",
+      "timestamp": "2026-08-09T15:48:00.000",
+      "eventType": "suspect_statement",
+      "personId": "sus_001",
+      "referenceId": "stmt_s001_01",
+      "evidenceIds": ["ev_audio_002"],
+      "gps": { "latitude": 28.5715, "longitude": 77.3230 }
+    },
+    {
+      "id": "tl_1723192200900",
+      "timestamp": "2026-08-09T15:50:00.000",
+      "eventType": "suspect_statement",
+      "personId": "sus_001",
+      "referenceId": "stmt_s001_02",
+      "evidenceIds": [],
+      "gps": { "latitude": 28.5715, "longitude": 77.3230 }
+    }
+  ]
+}

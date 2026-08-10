@@ -38,23 +38,22 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
   bool _hasLocationPermission = false;
   String? _locationPermissionError;
 
-  String _fetchedLocation = 'Sector 62, Noida';
-  double _latitude = 28.6272;
-  double _longitude = 77.3635;
-  String _fetchedWeather = 'Clear, 34°C, slight humidity';
+  String _fetchedLocation = '';
+  double _latitude = 0;
+  double _longitude = 0;
+  String _fetchedWeather = '';
 
-  String _station = 'Sector 18, Noida';
-  String _district = 'Gautam Budh Nagar';
-  String _state = 'Uttar Pradesh';
+  String _station = '';
+  String _district = '';
+  String _state = '';
 
-  // Officer info
+  // Officer info — populated from saved profile in initState
   AssignedOfficer _officer = const AssignedOfficer(
-    id: 'off_104',
-    badgeNumber: 'UP-GBN-8821',
-    name: 'Rahul Sharma',
-    designation: 'Sub Inspector',
-    station: 'Sector 18, Noida',
-    phone: '+91-9454403812',
+    badgeNumber: '',
+    name: '',
+    designation: '',
+    station: '',
+    phone: '',
   );
 
   bool _isSaving = false;
@@ -88,25 +87,32 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
           if (officerProfile.state.isNotEmpty) _state = officerProfile.state;
 
           _officer = AssignedOfficer(
-            id: 'off_104',
-            badgeNumber: 'UP-GBN-8821',
+            badgeNumber: officerProfile.badgeNumber,
             name: officerProfile.name.isNotEmpty ? officerProfile.name : 'Officer',
             designation: officerProfile.designation.isNotEmpty ? officerProfile.designation : 'Police Officer',
             station: _station,
-            phone: '+91-9454403812',
+            phone: officerProfile.phone,
           );
         });
       }
     } catch (_) {}
   }
 
-  void _initSpeech() async {
+  Future<void> _initSpeech() async {
     try {
       bool available = await _speech.initialize(
-        onError: (val) => setState(() => _isListening = false),
-        onStatus: (val) {
-          if (val == 'done' || val == 'notListening') {
+        onError: (val) {
+          if (mounted) {
             setState(() => _isListening = false);
+          }
+        },
+        onStatus: (val) {
+          if (mounted) {
+            if (val == 'done' || val == 'notListening') {
+              setState(() => _isListening = false);
+            } else if (val == 'listening') {
+              setState(() => _isListening = true);
+            }
           }
         },
       );
@@ -121,6 +127,62 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
           _speechAvailable = false;
         });
       }
+    }
+  }
+
+  void _toggleListening() async {
+    if (!_speechAvailable) {
+      await _initSpeech();
+      if (!_speechAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Speech recognition is not available or enabled on this device.'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
+    } else {
+      final initialText = _summaryController.text.trim();
+
+      if (mounted) {
+        setState(() => _isListening = true);
+      }
+
+      await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          localeId: _voiceLocaleId,
+          partialResults: true,
+          cancelOnError: true,
+          listenMode: stt.ListenMode.dictation,
+        ),
+        onResult: (result) {
+          if (mounted) {
+            final recognized = result.recognizedWords;
+            if (recognized.isNotEmpty) {
+              final newText = initialText.isEmpty
+                  ? recognized
+                  : '$initialText $recognized';
+              setState(() {
+                _summaryController.value = TextEditingValue(
+                  text: newText,
+                  selection: TextSelection.collapsed(offset: newText.length),
+                );
+              });
+            }
+          }
+        },
+      );
     }
   }
 
@@ -261,44 +323,6 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
     );
   }
 
-  void _toggleListening() async {
-    if (!_speechAvailable) {
-      _initSpeech();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Speech recognition initializing. Please try again in a moment.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-    } else {
-      final initialText = _summaryController.text.trim();
-
-      setState(() => _isListening = true);
-      await _speech.listen(
-        listenOptions: stt.SpeechListenOptions(localeId: _voiceLocaleId),
-        onResult: (result) {
-          final recognized = result.recognizedWords;
-          if (recognized.isNotEmpty) {
-            final newText = initialText.isEmpty
-                ? recognized
-                : '$initialText $recognized';
-            setState(() {
-              _summaryController.text = newText;
-              _summaryController.selection = TextSelection.fromPosition(
-                TextPosition(offset: newText.length),
-              );
-            });
-          }
-        },
-      );
-    }
-  }
 
   void _submitForm() async {
     if (!_hasLocationPermission) {
@@ -383,10 +407,10 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
 
     // 3. Initial Timeline Event with event_type: "case_brief"
     final initialTimelineEvent = TimelineEvent(
-      timelineId: 'tl_001',
+      timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
       timestamp: now.toIso8601String(),
       eventType: 'case_brief',
-      personId: _officer.id,
+      personId: _officer.badgeNumber,
       referenceId: '',
       evidenceIds: const [],
       gps: GpsLocation(latitude: _latitude, longitude: _longitude),
@@ -404,31 +428,54 @@ class _NewIncidentScreenState extends ConsumerState<NewIncidentScreen> {
       timeline: [initialTimelineEvent],
     );
 
-    // Save to providers and Isar DB
-    await ref.read(timelineMapNotifierProvider.notifier).saveTimelineDetails(newId, timelineDetails);
-    await ref.read(allIncidentsProvider.notifier).addIncident(newIncident);
+    try {
+      // Save to providers and Isar DB
+      await ref.read(timelineMapNotifierProvider.notifier).saveTimelineDetails(newId, timelineDetails);
+      await ref.read(allIncidentsProvider.notifier).addIncident(newIncident);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('${loc.text('incident_logged_success')} ("${newIncident.incidentName}")'),
-            ),
-          ],
+      // Clear input fields and stop loading state
+      setState(() {
+        _nameController.clear();
+        _categoryController.clear();
+        _summaryController.clear();
+        _isSaving = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('${loc.text('incident_logged_success')} ("${newIncident.incidentName}")'),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
 
-    // Navigate to the newly created incident's timeline
-    context.push('/timeline/${newIncident.id}');
+      // Navigate to the newly created incident's timeline
+      context.push('/timeline/${newIncident.id}');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create incident: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   String _formatTime(DateTime dt) {
