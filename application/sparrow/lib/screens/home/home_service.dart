@@ -87,9 +87,28 @@ class HomeService {
 
   /// Returns full parsed TimelineDetails for an incident from Isar local database
   Future<TimelineDetails> fetchTimelineDetails(String incidentId) async {
+    final officer = await fetchOfficerProfile();
     final detailsFromIsar = await _isarService.fetchTimelineDetails(incidentId);
+
     if (detailsFromIsar != null) {
-      return detailsFromIsar;
+      final updatedOfficer = AssignedOfficer(
+        badgeNumber: officer.badgeNumber.isNotEmpty ? officer.badgeNumber : detailsFromIsar.officer.badgeNumber,
+        name: officer.name.isNotEmpty ? officer.name : detailsFromIsar.officer.name,
+        designation: officer.designation.isNotEmpty ? officer.designation : detailsFromIsar.officer.designation,
+        station: officer.station.isNotEmpty ? officer.station : detailsFromIsar.officer.station,
+        phone: officer.phone.isNotEmpty ? officer.phone : detailsFromIsar.officer.phone,
+        district: officer.district.isNotEmpty ? officer.district : detailsFromIsar.officer.district,
+        state: officer.state.isNotEmpty ? officer.state : detailsFromIsar.officer.state,
+      );
+      final updatedIncident = detailsFromIsar.incident.copyWith(
+        station: officer.station.isNotEmpty ? officer.station : detailsFromIsar.incident.station,
+        district: officer.district.isNotEmpty ? officer.district : detailsFromIsar.incident.district,
+        state: officer.state.isNotEmpty ? officer.state : detailsFromIsar.incident.state,
+      );
+      return detailsFromIsar.copyWith(
+        officer: updatedOfficer,
+        incident: updatedIncident,
+      );
     }
 
     // Fallback: create fresh timeline details using matching incident from Isar DB
@@ -108,8 +127,6 @@ class HomeService {
         rawCategory: 'General',
       ),
     );
-
-    final officer = await fetchOfficerProfile();
 
     final overview = IncidentOverview(
       id: matchingIncident.id,
@@ -143,6 +160,8 @@ class HomeService {
         designation: officer.designation,
         station: officer.station,
         phone: officer.phone,
+        district: officer.district,
+        state: officer.state,
       ),
       victims: const [],
       witnesses: const [],

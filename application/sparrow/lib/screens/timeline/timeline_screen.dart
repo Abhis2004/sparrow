@@ -1835,18 +1835,24 @@ class _TimelineEventTile extends StatelessWidget {
   final bool isLast;
   final bool isDark;
 
-  String _getEventTitle(String eventType) {
+  String _getEventTitle(String eventType, AppLocalizations loc) {
     switch (eventType) {
       case 'case_brief':
         return 'Case Brief (Initial Report)';
       case 'officer_observation':
         return 'Officer Observation';
+      case 'victim_added':
+        return loc.text('victim_added_title');
+      case 'witness_added':
+        return loc.text('witness_added_title');
+      case 'suspect_added':
+        return loc.text('suspect_added_title');
       case 'victim_statement':
-        return 'Victim Statement';
+        return loc.text('victim_statement_title');
       case 'witness_statement':
-        return 'Witness Statement';
+        return loc.text('witness_statement_title');
       case 'suspect_statement':
-        return 'Suspect Statement';
+        return loc.text('suspect_statement_title');
       case 'evidence_capture':
         return 'Evidence Capture';
       case 'incident_edit':
@@ -1874,6 +1880,17 @@ class _TimelineEventTile extends StatelessWidget {
       }
       return parts.join(' \u2022 ');
     }
+    if (event.eventType == 'victim_added' ||
+        event.eventType == 'witness_added' ||
+        event.eventType == 'suspect_added') {
+      if (event.referenceId.isNotEmpty) {
+        parts.add('Name: ${event.referenceId}');
+      }
+      if (event.personId.isNotEmpty) {
+        parts.add('ID: ${event.personId}');
+      }
+      return parts.join(' \u2022 ');
+    }
     if (event.referenceId.isNotEmpty) {
       parts.add('Ref: ${event.referenceId}');
     }
@@ -1890,6 +1907,7 @@ class _TimelineEventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final loc = AppLocalizations.of(context);
 
     Color badgeColor;
     IconData eventIcon;
@@ -1902,6 +1920,18 @@ class _TimelineEventTile extends StatelessWidget {
       case 'officer_observation':
         badgeColor = Colors.blue;
         eventIcon = Icons.visibility_outlined;
+        break;
+      case 'victim_added':
+        badgeColor = Colors.green;
+        eventIcon = Icons.person_add_alt_1_rounded;
+        break;
+      case 'witness_added':
+        badgeColor = Colors.orange;
+        eventIcon = Icons.person_add_alt_1_rounded;
+        break;
+      case 'suspect_added':
+        badgeColor = Colors.purple;
+        eventIcon = Icons.person_add_alt_1_rounded;
         break;
       case 'victim_statement':
         badgeColor = Colors.green;
@@ -1980,7 +2010,7 @@ class _TimelineEventTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _getEventTitle(event.eventType),
+                _getEventTitle(event.eventType, loc),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -2672,17 +2702,34 @@ void _showAddStatementBottomSheet(
   );
 }
 
-/// Dialog Popup for adding a new Victim, Witness, or Suspect
+/// Dialog Popup for adding or editing a Victim, Witness, or Suspect
 class _AddPersonDialog extends StatefulWidget {
   const _AddPersonDialog({
     required this.timelineDetails,
     required this.ref,
     required this.personType,
+    this.personId,
+    this.initialName,
+    this.initialAge,
+    this.initialGender,
+    this.initialPhone,
+    this.initialAddress,
+    this.initialExtraText,
   });
 
   final TimelineDetails timelineDetails;
   final WidgetRef ref;
   final String personType;
+
+  final String? personId;
+  final String? initialName;
+  final int? initialAge;
+  final String? initialGender;
+  final String? initialPhone;
+  final String? initialAddress;
+  final String? initialExtraText;
+
+  bool get isEditing => personId != null && personId!.isNotEmpty;
 
   @override
   State<_AddPersonDialog> createState() => _AddPersonDialogState();
@@ -2698,6 +2745,21 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
 
   String _gender = 'Male';
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEditing) {
+      _nameController.text = widget.initialName ?? '';
+      _ageController.text = widget.initialAge != null ? widget.initialAge.toString() : '';
+      _phoneController.text = widget.initialPhone ?? '';
+      _addressController.text = widget.initialAddress ?? '';
+      _roleOrOccupationController.text = widget.initialExtraText ?? '';
+      if (widget.initialGender != null && widget.initialGender!.isNotEmpty) {
+        _gender = widget.initialGender!;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -2736,50 +2798,130 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
       TimelineDetails updatedDetails;
       String successKey;
 
-      if (widget.personType == 'witness') {
-        final existingCount = widget.timelineDetails.witnesses.length;
-        final autoId = 'wit_${(existingCount + 1).toString().padLeft(3, '0')}';
-        final newWitness = WitnessItem(
-          id: autoId,
-          name: name,
-          age: age,
-          gender: _gender,
-          phone: phone,
-          address: address,
-          occupation: extraText,
-          statements: const [],
-        );
-        updatedDetails = widget.timelineDetails.withWitness(newWitness);
-        successKey = 'witness_added';
-      } else if (widget.personType == 'suspect') {
-        final existingCount = widget.timelineDetails.suspects.length;
-        final autoId = 'sus_${(existingCount + 1).toString().padLeft(3, '0')}';
-        final newSuspect = SuspectItem(
-          id: autoId,
-          name: name,
-          age: age,
-          gender: _gender,
-          address: address,
-          status: extraText.isNotEmpty ? extraText : 'Suspect',
-          statements: const [],
-        );
-        updatedDetails = widget.timelineDetails.withSuspect(newSuspect);
-        successKey = 'suspect_added';
+      if (widget.isEditing) {
+        if (widget.personType == 'witness') {
+          final existing = widget.timelineDetails.witnesses.firstWhere(
+            (w) => w.id == widget.personId,
+            orElse: () => WitnessItem(
+              id: widget.personId!,
+              name: name,
+              age: age,
+              gender: _gender,
+              phone: phone,
+              address: address,
+              occupation: extraText,
+              statements: const [],
+            ),
+          );
+          final updatedWitness = WitnessItem(
+            id: widget.personId!,
+            name: name,
+            age: age,
+            gender: _gender,
+            phone: phone,
+            address: address,
+            occupation: extraText,
+            statements: existing.statements,
+          );
+          updatedDetails = widget.timelineDetails.withUpdatedWitness(updatedWitness);
+          successKey = 'witness_updated';
+        } else if (widget.personType == 'suspect') {
+          final existing = widget.timelineDetails.suspects.firstWhere(
+            (s) => s.id == widget.personId,
+            orElse: () => SuspectItem(
+              id: widget.personId!,
+              name: name,
+              age: age,
+              gender: _gender,
+              address: address,
+              status: extraText.isNotEmpty ? extraText : 'Suspect',
+              statements: const [],
+            ),
+          );
+          final updatedSuspect = SuspectItem(
+            id: widget.personId!,
+            name: name,
+            age: age,
+            gender: _gender,
+            address: address,
+            status: extraText.isNotEmpty ? extraText : 'Suspect',
+            statements: existing.statements,
+          );
+          updatedDetails = widget.timelineDetails.withUpdatedSuspect(updatedSuspect);
+          successKey = 'suspect_updated';
+        } else {
+          final existing = widget.timelineDetails.victims.firstWhere(
+            (v) => v.id == widget.personId,
+            orElse: () => VictimItem(
+              id: widget.personId!,
+              name: name,
+              age: age,
+              gender: _gender,
+              phone: phone,
+              address: address,
+              role: extraText,
+              statements: const [],
+            ),
+          );
+          final updatedVictim = VictimItem(
+            id: widget.personId!,
+            name: name,
+            age: age,
+            gender: _gender,
+            phone: phone,
+            address: address,
+            role: extraText,
+            statements: existing.statements,
+          );
+          updatedDetails = widget.timelineDetails.withUpdatedVictim(updatedVictim);
+          successKey = 'victim_updated';
+        }
       } else {
-        final existingCount = widget.timelineDetails.victims.length;
-        final autoId = 'vic_${(existingCount + 1).toString().padLeft(3, '0')}';
-        final newVictim = VictimItem(
-          id: autoId,
-          name: name,
-          age: age,
-          gender: _gender,
-          phone: phone,
-          address: address,
-          role: extraText,
-          statements: const [],
-        );
-        updatedDetails = widget.timelineDetails.withVictim(newVictim);
-        successKey = 'victim_added';
+        if (widget.personType == 'witness') {
+          final existingCount = widget.timelineDetails.witnesses.length;
+          final autoId = 'wit_${(existingCount + 1).toString().padLeft(3, '0')}';
+          final newWitness = WitnessItem(
+            id: autoId,
+            name: name,
+            age: age,
+            gender: _gender,
+            phone: phone,
+            address: address,
+            occupation: extraText,
+            statements: const [],
+          );
+          updatedDetails = widget.timelineDetails.withWitness(newWitness);
+          successKey = 'witness_added';
+        } else if (widget.personType == 'suspect') {
+          final existingCount = widget.timelineDetails.suspects.length;
+          final autoId = 'sus_${(existingCount + 1).toString().padLeft(3, '0')}';
+          final newSuspect = SuspectItem(
+            id: autoId,
+            name: name,
+            age: age,
+            gender: _gender,
+            address: address,
+            status: extraText.isNotEmpty ? extraText : 'Suspect',
+            statements: const [],
+          );
+          updatedDetails = widget.timelineDetails.withSuspect(newSuspect);
+          successKey = 'suspect_added';
+        } else {
+          final existingCount = widget.timelineDetails.victims.length;
+          final autoId = 'vic_${(existingCount + 1).toString().padLeft(3, '0')}';
+          final newVictim = VictimItem(
+            id: autoId,
+            name: name,
+            age: age,
+            gender: _gender,
+            phone: phone,
+            address: address,
+            role: extraText,
+            statements: const [],
+          );
+          updatedDetails = widget.timelineDetails.withVictim(newVictim);
+          successKey = 'victim_added';
+        }
       }
 
       final rootIncident = updatedDetails.incident.toRootIncident();
@@ -2809,7 +2951,7 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add: $e'),
+            content: Text('Failed to save: $e'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -2831,21 +2973,21 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
     IconData extraIcon;
 
     if (widget.personType == 'witness') {
-      title = loc.text('add_witness_btn');
+      title = loc.text(widget.isEditing ? 'edit_witness_btn' : 'add_witness_btn');
       accentColor = const Color(0xFFEA580C);
       nameHint = loc.text('person_name_hint');
       extraLabel = loc.text('occupation');
       extraHint = loc.text('witness_occupation_hint');
       extraIcon = Icons.work_outline;
     } else if (widget.personType == 'suspect') {
-      title = loc.text('add_suspect_btn');
+      title = loc.text(widget.isEditing ? 'edit_suspect_btn' : 'add_suspect_btn');
       accentColor = const Color(0xFF9333EA);
       nameHint = loc.text('suspect_name_hint');
       extraLabel = loc.text('suspect_status');
       extraHint = loc.text('suspect_status_hint');
       extraIcon = Icons.badge_outlined;
     } else {
-      title = loc.text('add_victim_btn');
+      title = loc.text(widget.isEditing ? 'edit_victim_btn' : 'add_victim_btn');
       accentColor = const Color(0xFF16A34A);
       nameHint = loc.text('person_name_hint');
       extraLabel = loc.text('role');
@@ -3029,7 +3171,7 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : Text(
-                                loc.text('save'),
+                                loc.text(widget.isEditing ? 'save_changes' : 'save'),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -3047,6 +3189,37 @@ class _AddPersonDialogState extends State<_AddPersonDialog> {
       ),
     );
   }
+}
+
+/// Helper to open Edit Person dialog for a victim, witness, or suspect
+void _showEditPersonDialog(
+  BuildContext context,
+  TimelineDetails timelineDetails,
+  WidgetRef ref, {
+  required String personType,
+  required String personId,
+  required String name,
+  required int age,
+  required String gender,
+  required String phone,
+  required String address,
+  required String extraText,
+}) {
+  showDialog(
+    context: context,
+    builder: (context) => _AddPersonDialog(
+      timelineDetails: timelineDetails,
+      ref: ref,
+      personType: personType,
+      personId: personId,
+      initialName: name,
+      initialAge: age,
+      initialGender: gender,
+      initialPhone: phone,
+      initialAddress: address,
+      initialExtraText: extraText,
+    ),
+  );
 }
 
 /// 9. Victims Bottom Sheet & Statements Accordion Timeline
@@ -4074,7 +4247,34 @@ class _PersonCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () {
+                      _showEditPersonDialog(
+                        context,
+                        timelineDetails,
+                        ref,
+                        personType: personType,
+                        personId: personId,
+                        name: name,
+                        age: age,
+                        gender: gender,
+                        phone: phone ?? '',
+                        address: address ?? '',
+                        extraText: subtitle ?? '',
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   Icon(
                     isExpanded
                         ? Icons.keyboard_arrow_up_rounded

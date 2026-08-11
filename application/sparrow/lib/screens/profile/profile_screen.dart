@@ -55,7 +55,7 @@ class ProfileScreen extends ConsumerWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'NOTICE: THIS IS A PROTOTYPE APPLICATION INTENDED EXCLUSIVELY FOR TESTING AND EVALUATION PURPOSES.',
+                        loc.text('prototype_notice'),
                         style: TextStyle(
                           color: isDark ? Colors.red.shade300 : Colors.red.shade800,
                           fontWeight: FontWeight.bold,

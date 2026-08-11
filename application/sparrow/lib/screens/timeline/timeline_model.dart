@@ -231,6 +231,8 @@ class AssignedOfficer {
     required this.designation,
     required this.station,
     required this.phone,
+    this.district = '',
+    this.state = '',
   });
 
   final String badgeNumber;
@@ -238,18 +240,23 @@ class AssignedOfficer {
   final String designation;
   final String station;
   final String phone;
+  final String district;
+  final String state;
 
   factory AssignedOfficer.fromJson(Map<String, dynamic> json) {
     return AssignedOfficer(
       // Support legacy JSON that stored an 'id' field — treat it as badgeNumber fallback
-      badgeNumber: json['badge_number'] as String? ??
-          json['badgeNumber'] as String? ??
-          json['id'] as String? ??
-          '',
+      badgeNumber: (json['badge_number'] as String? ??
+              json['badgeNumber'] as String? ??
+              json['id'] as String? ??
+              '')
+          .toUpperCase(),
       name: json['name'] as String? ?? '',
       designation: json['designation'] as String? ?? '',
       station: json['station'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
+      district: json['district'] as String? ?? '',
+      state: json['state'] as String? ?? '',
     );
   }
 
@@ -260,6 +267,8 @@ class AssignedOfficer {
       'designation': designation,
       'station': station,
       'phone': phone,
+      'district': district,
+      'state': state,
     };
   }
 }
@@ -684,6 +693,28 @@ class TimelineDetails {
   final List<EvidenceItem> evidence;
   final List<TimelineEvent> timeline;
 
+  TimelineDetails copyWith({
+    IncidentOverview? incident,
+    AssignedOfficer? officer,
+    List<VictimItem>? victims,
+    List<WitnessItem>? witnesses,
+    List<SuspectItem>? suspects,
+    List<OfficerObservationItem>? officerObservations,
+    List<EvidenceItem>? evidence,
+    List<TimelineEvent>? timeline,
+  }) {
+    return TimelineDetails(
+      incident: incident ?? this.incident,
+      officer: officer ?? this.officer,
+      victims: victims ?? this.victims,
+      witnesses: witnesses ?? this.witnesses,
+      suspects: suspects ?? this.suspects,
+      officerObservations: officerObservations ?? this.officerObservations,
+      evidence: evidence ?? this.evidence,
+      timeline: timeline ?? this.timeline,
+    );
+  }
+
   factory TimelineDetails.fromJson(Map<String, dynamic> json) {
     return TimelineDetails(
       incident: IncidentOverview.fromJson(
@@ -763,10 +794,22 @@ class TimelineDetails {
   }
 
 
-  /// Appends a victim and automatically logs a 'victim_statement' timeline event for each statement.
+  /// Appends a victim and logs a 'victim_added' timeline event (plus 'victim_statement' events for any statements).
   TimelineDetails withVictim(VictimItem victim) {
-    final newEvents = victim.statements.map((stmt) {
-      return TimelineEvent(
+    final nowIso = DateTime.now().toIso8601String();
+    final newEvents = <TimelineEvent>[
+      TimelineEvent(
+        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        timestamp: nowIso,
+        eventType: 'victim_added',
+        personId: victim.id,
+        referenceId: victim.name,
+        evidenceIds: const [],
+        gps: incident.gps,
+      ),
+    ];
+    for (final stmt in victim.statements) {
+      newEvents.add(TimelineEvent(
         timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}_${stmt.statementId}',
         timestamp: stmt.timestamp,
         eventType: 'victim_statement',
@@ -774,22 +817,12 @@ class TimelineDetails {
         referenceId: stmt.statementId,
         evidenceIds: stmt.evidenceIds,
         gps: stmt.gps ?? incident.gps,
-      );
-    }).toList();
-    if (newEvents.isEmpty) {
-      newEvents.add(TimelineEvent(
-        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now().toIso8601String(),
-        eventType: 'victim_statement',
-        personId: victim.id,
-        referenceId: '',
-        evidenceIds: const [],
-        gps: incident.gps,
       ));
     }
 
     final updatedOverview = incident.copyWith(
       victimCount: victims.length + 1,
+      lastInteracted: nowIso,
     );
     return TimelineDetails(
       incident: updatedOverview,
@@ -803,10 +836,22 @@ class TimelineDetails {
     );
   }
 
-  /// Appends a witness and automatically logs a 'witness_statement' timeline event for each statement.
+  /// Appends a witness and logs a 'witness_added' timeline event (plus 'witness_statement' events for any statements).
   TimelineDetails withWitness(WitnessItem witness) {
-    final newEvents = witness.statements.map((stmt) {
-      return TimelineEvent(
+    final nowIso = DateTime.now().toIso8601String();
+    final newEvents = <TimelineEvent>[
+      TimelineEvent(
+        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        timestamp: nowIso,
+        eventType: 'witness_added',
+        personId: witness.id,
+        referenceId: witness.name,
+        evidenceIds: const [],
+        gps: incident.gps,
+      ),
+    ];
+    for (final stmt in witness.statements) {
+      newEvents.add(TimelineEvent(
         timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}_${stmt.statementId}',
         timestamp: stmt.timestamp,
         eventType: 'witness_statement',
@@ -814,22 +859,12 @@ class TimelineDetails {
         referenceId: stmt.statementId,
         evidenceIds: stmt.evidenceIds,
         gps: stmt.gps ?? incident.gps,
-      );
-    }).toList();
-    if (newEvents.isEmpty) {
-      newEvents.add(TimelineEvent(
-        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now().toIso8601String(),
-        eventType: 'witness_statement',
-        personId: witness.id,
-        referenceId: '',
-        evidenceIds: const [],
-        gps: incident.gps,
       ));
     }
 
     final updatedOverview = incident.copyWith(
       witnessCount: witnesses.length + 1,
+      lastInteracted: nowIso,
     );
     return TimelineDetails(
       incident: updatedOverview,
@@ -941,10 +976,22 @@ class TimelineDetails {
     );
   }
 
-  /// Appends a suspect and automatically logs a 'suspect_statement' timeline event for each statement.
+  /// Appends a suspect and logs a 'suspect_added' timeline event (plus 'suspect_statement' events for any statements).
   TimelineDetails withSuspect(SuspectItem suspect) {
-    final newEvents = suspect.statements.map((stmt) {
-      return TimelineEvent(
+    final nowIso = DateTime.now().toIso8601String();
+    final newEvents = <TimelineEvent>[
+      TimelineEvent(
+        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        timestamp: nowIso,
+        eventType: 'suspect_added',
+        personId: suspect.id,
+        referenceId: suspect.name,
+        evidenceIds: const [],
+        gps: incident.gps,
+      ),
+    ];
+    for (final stmt in suspect.statements) {
+      newEvents.add(TimelineEvent(
         timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}_${stmt.statementId}',
         timestamp: stmt.timestamp,
         eventType: 'suspect_statement',
@@ -952,22 +999,12 @@ class TimelineDetails {
         referenceId: stmt.statementId,
         evidenceIds: stmt.evidenceIds,
         gps: stmt.gps ?? incident.gps,
-      );
-    }).toList();
-    if (newEvents.isEmpty) {
-      newEvents.add(TimelineEvent(
-        timelineId: 'tl_${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now().toIso8601String(),
-        eventType: 'suspect_statement',
-        personId: suspect.id,
-        referenceId: '',
-        evidenceIds: const [],
-        gps: incident.gps,
       ));
     }
 
     final updatedOverview = incident.copyWith(
       suspectCount: suspects.length + 1,
+      lastInteracted: nowIso,
     );
     return TimelineDetails(
       incident: updatedOverview,
@@ -1303,6 +1340,72 @@ class TimelineDetails {
       officerObservations: officerObservations,
       evidence: evidence,
       timeline: updatedTimeline,
+    );
+  }
+
+  /// Updates details of an existing victim by ID.
+  TimelineDetails withUpdatedVictim(VictimItem updatedVictim) {
+    final nowIso = DateTime.now().toIso8601String();
+    final updatedVictims = victims.map((v) {
+      if (v.id == updatedVictim.id) {
+        return updatedVictim;
+      }
+      return v;
+    }).toList();
+
+    return TimelineDetails(
+      incident: incident.copyWith(lastInteracted: nowIso),
+      officer: officer,
+      victims: updatedVictims,
+      witnesses: witnesses,
+      suspects: suspects,
+      officerObservations: officerObservations,
+      evidence: evidence,
+      timeline: timeline,
+    );
+  }
+
+  /// Updates details of an existing witness by ID.
+  TimelineDetails withUpdatedWitness(WitnessItem updatedWitness) {
+    final nowIso = DateTime.now().toIso8601String();
+    final updatedWitnesses = witnesses.map((w) {
+      if (w.id == updatedWitness.id) {
+        return updatedWitness;
+      }
+      return w;
+    }).toList();
+
+    return TimelineDetails(
+      incident: incident.copyWith(lastInteracted: nowIso),
+      officer: officer,
+      victims: victims,
+      witnesses: updatedWitnesses,
+      suspects: suspects,
+      officerObservations: officerObservations,
+      evidence: evidence,
+      timeline: timeline,
+    );
+  }
+
+  /// Updates details of an existing suspect by ID.
+  TimelineDetails withUpdatedSuspect(SuspectItem updatedSuspect) {
+    final nowIso = DateTime.now().toIso8601String();
+    final updatedSuspects = suspects.map((s) {
+      if (s.id == updatedSuspect.id) {
+        return updatedSuspect;
+      }
+      return s;
+    }).toList();
+
+    return TimelineDetails(
+      incident: incident.copyWith(lastInteracted: nowIso),
+      officer: officer,
+      victims: victims,
+      witnesses: witnesses,
+      suspects: updatedSuspects,
+      officerObservations: officerObservations,
+      evidence: evidence,
+      timeline: timeline,
     );
   }
 }

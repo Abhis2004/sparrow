@@ -936,6 +936,18 @@ class AppLocalizations {
       AppLanguage.english: 'No recorded statements.',
       AppLanguage.hindi: 'कोई दर्ज बयान नहीं है।',
     },
+    'prototype_notice': {
+      AppLanguage.english:
+          'NOTICE: THIS IS A PROTOTYPE APPLICATION INTENDED EXCLUSIVELY FOR TESTING AND EVALUATION PURPOSES.',
+      AppLanguage.hindi:
+          'सूचना: यह एक प्रोटोटाइप आवेदन है जो केवल परीक्षण और मूल्यांकन के उद्देश्यों के लिए है।',
+    },
+    'no_active_incident_action_error': {
+      AppLanguage.english:
+          'No active investigation found. Please start a new incident first.',
+      AppLanguage.hindi:
+          'कोई सक्रिय जांच नहीं मिली। कृपया पहले एक नया मामला दर्ज करें।',
+    },
 
     // Officer Profile Setup & Edit Modal Translations
     'officer_identification': {
@@ -1021,6 +1033,54 @@ class AppLocalizations {
     'hint_phone': {
       AppLanguage.english: 'e.g. +91-9876543210',
       AppLanguage.hindi: 'जैसे: +91-9876543210',
+    },
+    'edit_victim_btn': {
+      AppLanguage.english: 'Edit Victim',
+      AppLanguage.hindi: 'पीड़ित के विवरण संपादित करें',
+    },
+    'edit_witness_btn': {
+      AppLanguage.english: 'Edit Witness',
+      AppLanguage.hindi: 'गवाह के विवरण संपादित करें',
+    },
+    'edit_suspect_btn': {
+      AppLanguage.english: 'Edit Suspect',
+      AppLanguage.hindi: 'संदिग्ध के विवरण संपादित करें',
+    },
+    'victim_updated': {
+      AppLanguage.english: 'Victim details updated successfully!',
+      AppLanguage.hindi: 'पीड़ित के विवरण सफलतापूर्वक अद्यतन किए गए!',
+    },
+    'witness_updated': {
+      AppLanguage.english: 'Witness details updated successfully!',
+      AppLanguage.hindi: 'गवाह के विवरण सफलतापूर्वक अद्यतन किए गए!',
+    },
+    'suspect_updated': {
+      AppLanguage.english: 'Suspect details updated successfully!',
+      AppLanguage.hindi: 'संदिग्ध के विवरण सफलतापूर्वक अद्यतन किए गए!',
+    },
+    'victim_added_title': {
+      AppLanguage.english: 'New Victim Added',
+      AppLanguage.hindi: 'नया पीड़ित जोड़ा गया',
+    },
+    'witness_added_title': {
+      AppLanguage.english: 'New Witness Added',
+      AppLanguage.hindi: 'नया गवाह जोड़ा गया',
+    },
+    'suspect_added_title': {
+      AppLanguage.english: 'New Suspect Added',
+      AppLanguage.hindi: 'नया संदिग्ध जोड़ा गया',
+    },
+    'victim_statement_title': {
+      AppLanguage.english: 'Victim Statement',
+      AppLanguage.hindi: 'पीड़ित का बयान',
+    },
+    'witness_statement_title': {
+      AppLanguage.english: 'Witness Statement',
+      AppLanguage.hindi: 'गवाह का बयान',
+    },
+    'suspect_statement_title': {
+      AppLanguage.english: 'Suspect Statement',
+      AppLanguage.hindi: 'संदिग्ध का बयान',
     },
   };
 

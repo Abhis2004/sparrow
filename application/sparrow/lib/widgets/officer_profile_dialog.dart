@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/colors.dart';
+import '../core/localization/app_language.dart';
 import '../core/localization/app_localizations.dart';
+import '../core/localization/locale_provider.dart';
 import '../screens/home/home_service.dart';
 import '../screens/home/model/home_model.dart';
 
@@ -51,7 +53,8 @@ class _OfficerProfileSetupDialogState
     _stationController = TextEditingController(text: currentProfile.station);
     _districtController = TextEditingController(text: currentProfile.district);
     _stateController = TextEditingController(text: currentProfile.state);
-    _badgeNumberController = TextEditingController(text: currentProfile.badgeNumber);
+    _badgeNumberController =
+        TextEditingController(text: currentProfile.badgeNumber.toUpperCase());
     _phoneController = TextEditingController(text: currentProfile.phone);
 
     _nameController.addListener(() {
@@ -84,7 +87,7 @@ class _OfficerProfileSetupDialogState
         station: _stationController.text.trim(),
         district: _districtController.text.trim(),
         state: _stateController.text.trim(),
-        badgeNumber: _badgeNumberController.text.trim(),
+        badgeNumber: _badgeNumberController.text.trim().toUpperCase(),
         phone: _phoneController.text.trim(),
         profileImage: null,
       );
@@ -116,29 +119,70 @@ class _OfficerProfileSetupDialogState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header Badge / Icon
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.shield_rounded, size: 16, color: colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        loc.text('officer_identification'),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
-                          color: colorScheme.primary,
+                // Top Row: Header Badge & Language Switch Button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shield_rounded, size: 16, color: colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            loc.text('officer_identification'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Language Switch Button
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          ref.read(languageProvider.notifier).toggleLanguage();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.g_translate_rounded,
+                                size: 18,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                loc.language == AppLanguage.english ? 'EN' : 'HI',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
@@ -225,6 +269,7 @@ class _OfficerProfileSetupDialogState
                   hint: loc.text('hint_badge_number'),
                   icon: Icons.numbers_outlined,
                   isRequired: true,
+                  textCapitalization: TextCapitalization.characters,
                 ),
                 const SizedBox(height: 14),
                 _buildTextField(
@@ -286,12 +331,24 @@ class _OfficerProfileSetupDialogState
     required IconData icon,
     bool isRequired = true,
     TextInputType keyboardType = TextInputType.text,
+    TextCapitalization textCapitalization = TextCapitalization.words,
   }) {
     final loc = AppLocalizations.of(context);
     return TextFormField(
       controller: controller,
-      textCapitalization: TextCapitalization.words,
+      textCapitalization: textCapitalization,
       keyboardType: keyboardType,
+      onChanged: textCapitalization == TextCapitalization.characters
+          ? (value) {
+              final upper = value.toUpperCase();
+              if (value != upper) {
+                controller.value = controller.value.copyWith(
+                  text: upper,
+                  selection: TextSelection.collapsed(offset: upper.length),
+                );
+              }
+            }
+          : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

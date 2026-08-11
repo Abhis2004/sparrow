@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/localization/locale_provider.dart';
 import '../timeline/timeline_provider.dart';
 import '../timeline/timeline_screen.dart';
@@ -107,6 +108,7 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeDataAsync = ref.watch(homeDataProvider);
+    final loc = AppLocalizations.of(context);
 
     return Scaffold(
       body: homeDataAsync.when(
@@ -157,7 +159,7 @@ class HomeScreen extends ConsumerWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'NOTICE: THIS IS A PROTOTYPE APPLICATION INTENDED EXCLUSIVELY FOR TESTING AND EVALUATION PURPOSES.',
+                          loc.text('prototype_notice'),
                           style: TextStyle(
                             color: Theme.of(context).brightness == Brightness.dark
                                 ? Colors.red.shade300
@@ -216,14 +218,10 @@ class HomeScreen extends ConsumerWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'No active investigation found. Please start a new incident first to record ${action.title.replaceAll('\n', ' ')}.',
-                          ),
-                          action: SnackBarAction(
-                            label: 'New Incident',
-                            onPressed: () => context.go('/new-incident'),
+                            loc.text('no_active_incident_action_error'),
                           ),
                           behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 4),
+                          duration: const Duration(seconds: 2),
                         ),
                       );
                     }

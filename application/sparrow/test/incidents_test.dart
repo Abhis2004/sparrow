@@ -513,7 +513,7 @@ void main() {
         ),
       );
       expect(withVic.victims.length, 1);
-      expect(withVic.timeline.length, 2);
+      expect(withVic.timeline.length, 3);
       expect(withVic.timeline.last.eventType, 'victim_statement');
 
       // 3. Add Witness
@@ -537,7 +537,7 @@ void main() {
         ),
       );
       expect(withWit.witnesses.length, 1);
-      expect(withWit.timeline.length, 3);
+      expect(withWit.timeline.length, 5);
       expect(withWit.timeline.last.eventType, 'witness_statement');
 
       // 4. Add Suspect
@@ -560,7 +560,7 @@ void main() {
         ),
       );
       expect(withSus.suspects.length, 1);
-      expect(withSus.timeline.length, 4);
+      expect(withSus.timeline.length, 7);
       expect(withSus.timeline.last.eventType, 'suspect_statement');
 
       // 5. Add Evidence
@@ -568,20 +568,20 @@ void main() {
         const EvidenceItem(
           id: 'ev_001',
           type: EvidenceType.photo,
-          fileName: 'crime_scene.png',
+          fileName: 'photo.jpg',
           capturedAt: '2026-08-04T10:20:00Z',
           gps: GpsLocation(latitude: 28.5, longitude: 77.3),
         ),
       );
       expect(withEv.evidence.length, 1);
-      expect(withEv.timeline.length, 5);
+      expect(withEv.timeline.length, 8);
       expect(withEv.timeline.last.eventType, 'evidence_capture');
 
       // 6. Edit Incident Details
       final withEdit = withEv.withIncidentEdit(
         withEv.incident.copyWith(summary: 'Updated crime summary'),
       );
-      expect(withEdit.timeline.length, 6);
+      expect(withEdit.timeline.length, 9);
       expect(withEdit.timeline.last.eventType, 'incident_edit');
     });
 
